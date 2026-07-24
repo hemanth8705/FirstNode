@@ -12,13 +12,9 @@ class SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 12,
-          letterSpacing: 0.5,
-          color: AppColors.w(0.4),
-        ),
-      );
+    text.toUpperCase(),
+    style: TextStyle(fontSize: 12, letterSpacing: 0.5, color: AppColors.w(0.4)),
+  );
 }
 
 /// A dark rounded panel with a hairline border — the app's basic "card".
@@ -117,7 +113,11 @@ class CircleStepButton extends StatelessWidget {
         ),
         child: Text(
           glyph,
-          style: TextStyle(color: Colors.white, fontSize: size * 0.54, height: 1),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: size * 0.54,
+            height: 1,
+          ),
         ),
       ),
     );
@@ -357,7 +357,12 @@ class BackHeader extends StatelessWidget {
   final String title;
   final Widget? trailing;
   final VoidCallback? onBack;
-  const BackHeader({required this.title, this.trailing, this.onBack, super.key});
+  const BackHeader({
+    required this.title,
+    this.trailing,
+    this.onBack,
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -373,7 +378,11 @@ class BackHeader extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             child: const Padding(
               padding: EdgeInsets.all(4),
-              child: Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.white),
+              child: Icon(
+                Icons.arrow_back_ios_new,
+                size: 18,
+                color: Colors.white,
+              ),
             ),
           ),
           const SizedBox(width: 8),

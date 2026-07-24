@@ -202,7 +202,16 @@ screens, navigation, data that saves across restarts, and a working in-app TEST
 #### Verified
 - `flutter analyze` → **No issues found.**
 - `flutter test` → smoke test passes (Home renders, seeded alarm shows).
-- (Android debug APK build run separately to confirm native compilation.)
+- `flutter build apk --debug` → **succeeds** (`app-debug.apk`), confirming the whole
+  thing compiles and packages natively for Android.
+
+#### Build fix (Windows Kotlin cache)
+The first APK build failed with *"Could not close incremental caches"* while
+compiling `shared_preferences_android`. This is a known Windows issue (antivirus /
+file-locking on the Kotlin incremental-compile cache), **not** a code problem. Fix:
+added `kotlin.incremental=false` to [android/gradle.properties](android/gradle.properties)
+and re-ran after `flutter clean`. Build then succeeded. (Trade-off: slightly slower
+incremental Kotlin builds; safe to revisit later.)
 
 #### Deliberately deferred (so we ship the foundation first)
 - **Real scheduled alarms** that fire when the app is closed/locked — the next
@@ -215,5 +224,101 @@ screens, navigation, data that saves across restarts, and a working in-app TEST
   added when we polish iOS.
 - **Puzzle-solve back button** is currently allowed (handy while testing); for a real
   fired alarm we'll block it so the alarm can't be dismissed without solving.
+
+### 2026-07-25 — Milestone 2: real scheduled alarms (Android)
+
+Goal: alarms that actually fire at the set time — even when the app is closed or
+the phone is locked — ring loudly, and require solving the puzzles to dismiss.
+
+#### Engine choice: the `alarm` package (v5.5.0)
+Reliable alarms are the hard part. Rather than hand-build native code, we use the
+**`alarm`** package, which is purpose-built for alarm-clock apps. It does the parts
+that are genuinely hard on Android:
+- Fires at an **exact** time via `AlarmManager`, surviving app-kill and reboot.
+- Plays audio from a **foreground service** (so sound works even when killed).
+- Shows a **full-screen intent** notification that can wake the screen.
+- Exposes an `Alarm.ringing` stream so we can show our own puzzle UI.
+- Its **volume fade** maps directly onto our "gradual volume" feature.
+
+`flutter pub add alarm permission_handler` (permission_handler for the runtime
+notification / exact-alarm prompts).
+
+#### Android configuration
+- [AndroidManifest.xml](android/app/src/main/AndroidManifest.xml): added the alarm
+  permissions (`SCHEDULE_EXACT_ALARM`, `USE_EXACT_ALARM`, `POST_NOTIFICATIONS`,
+  `USE_FULL_SCREEN_INTENT`, `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`, foreground-service
+  perms, `VIBRATE`) and the package's `NotificationOnKillService`.
+- [build.gradle.kts](android/app/build.gradle.kts): `compileSdk = 36` (the alarm
+  package's `flutter_fgbg` dependency requires compiling against API 35+; Flutter's
+  default 34 fails the build) and `multiDexEnabled = true`.
+- [notification_icon.xml](android/app/src/main/res/drawable/notification_icon.xml):
+  a white alarm-clock vector for the status-bar notification.
+
+#### New code
+- [lib/services/alarm_scheduler.dart](lib/services/alarm_scheduler.dart) — the heart
+  of this milestone. It:
+  - Computes `nextOccurrence()` from an alarm's time + repeat days (0=Mon…6=Sun;
+    empty = once).
+  - Maps our `Alarm` → the package's `AlarmSettings` (chooses the tone asset for
+    specific/random/pool, sets `loopAudio`, `androidFullScreenIntent`, and volume).
+  - **Gradual volume → `VolumeSettings.fade`**; otherwise `VolumeSettings.fixed`.
+  - **Omits the notification Stop button when the alarm has puzzles**, so it can't be
+    silenced without solving them.
+  - `scheduleOne`, `cancel`, and `syncAll` (reconciles the OS schedule with our list).
+- [lib/services/permissions.dart](lib/services/permissions.dart) — requests
+  notification + exact-alarm permissions at startup.
+
+#### Wiring (in [lib/main.dart](lib/main.dart))
+- A global `navigatorKey` lets us navigate even when the app is launched *by* an
+  alarm (no existing screen context).
+- `main()` now `await`s `Alarm.init()` before scheduling anything.
+- A root `StatefulWidget` listens to `Alarm.ringing`. When an alarm fires it looks up
+  our `Alarm` (with its puzzles), pushes the ring/puzzle screen, and on dismiss:
+  - **repeating alarm →** schedules the next occurrence;
+  - **one-off alarm →** turns itself off.
+- `AppState.onAlarmsChanged` re-syncs the OS schedule after every add/edit/delete/
+  toggle. `AppState.ready` lets the ring handler wait for data on a cold start.
+
+#### Test vs. real (one screen, two modes)
+The `RingingScreen` / `PuzzleSolveScreen` gained flags:
+- **TEST button** → `playInApp: true` (our `AudioService` previews the tone), back
+  allowed.
+- **Real alarm** → `playInApp: false` (the package is already playing audio),
+  `blockBack: true` (can't back out of a puzzle), and an `onStop` callback that stops
+  the native alarm and reschedules/disables it.
+
+#### Known limitations (documented, for later milestones)
+- **Pools/trim at ring time:** a fired alarm plays a *single* tone (first/random pool
+  song), not a trimmed multi-song sequence. The pool/trim UI is saved but full
+  playback needs a custom native player — future work.
+- **Repeat rescheduling** happens when the alarm is acknowledged. A fully robust
+  solution would reschedule from a native receiver even if ignored.
+- **iOS** scheduling isn't wired yet (Android-first), and iOS can't match Android's
+  background behavior regardless.
+- **Permissions:** on Android 12 the user must allow "Alarms & reminders"; if denied,
+  alarms may fire inexactly.
+
+#### How to test on a device
+1. `flutter run` on an Android phone; grant the notification / alarm permissions.
+2. Add an alarm a minute or two ahead, keep it enabled, and lock the phone.
+3. It should ring and show the puzzle screen; solve it to dismiss.
+   (The **TEST** button still gives an instant in-app preview without waiting.)
+
+#### Build fix (plugin compileSdk mismatch)
+The APK build first failed at `:alarm:checkDebugAarMetadata`: the `alarm` 5.5.0 plugin
+hardcodes `compileSdkVersion 34` in its own Gradle file, but its dependency
+`flutter_fgbg 0.8.0` is built against API 35 and requires consumers to match — an
+inconsistency inside the plugin. We can't edit the plugin (it lives in the pub cache
+and would be overwritten), so the fix is a root-Gradle override in
+[android/build.gradle.kts](android/build.gradle.kts) that forces every Android module
+to `compileSdk = 36` (plus `compileSdk = 36` on the app module itself). A
+`state.executed` guard avoids a Gradle "afterEvaluate on an already-evaluated
+project" error for `:app`.
+
+#### Verified
+- `flutter analyze` → **No issues found.**
+- `flutter test` → passes.
+- `flutter build apk --debug` → **succeeds** (`app-debug.apk`) with the native alarm
+  engine integrated.
 
 _(further entries appended below as each piece is built)_

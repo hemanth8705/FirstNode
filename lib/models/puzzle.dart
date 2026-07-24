@@ -50,30 +50,30 @@ class RewritePuzzle implements Puzzle {
 
   @override
   RewritePuzzle clone() => RewritePuzzle(
-        upper: upper,
-        lower: lower,
-        numbers: numbers,
-        special: special,
-        length: length,
-      );
+    upper: upper,
+    lower: lower,
+    numbers: numbers,
+    special: special,
+    length: length,
+  );
 
   @override
   Map<String, dynamic> toJson() => {
-        'type': 'rewrite',
-        'upper': upper,
-        'lower': lower,
-        'numbers': numbers,
-        'special': special,
-        'length': length,
-      };
+    'type': 'rewrite',
+    'upper': upper,
+    'lower': lower,
+    'numbers': numbers,
+    'special': special,
+    'length': length,
+  };
 
   factory RewritePuzzle.fromJson(Map<String, dynamic> j) => RewritePuzzle(
-        upper: j['upper'] ?? true,
-        lower: j['lower'] ?? true,
-        numbers: j['numbers'] ?? false,
-        special: j['special'] ?? false,
-        length: j['length'] ?? 8,
-      );
+    upper: j['upper'] ?? true,
+    lower: j['lower'] ?? true,
+    numbers: j['numbers'] ?? false,
+    special: j['special'] ?? false,
+    length: j['length'] ?? 8,
+  );
 }
 
 enum DiffMode { fixed, random }
@@ -101,20 +101,20 @@ class Difficulty {
       Difficulty(level: level, mode: mode, count: count, min: min, max: max);
 
   Map<String, dynamic> toJson() => {
-        'level': level.name,
-        'mode': mode.name,
-        'count': count,
-        'min': min,
-        'max': max,
-      };
+    'level': level.name,
+    'mode': mode.name,
+    'count': count,
+    'min': min,
+    'max': max,
+  };
 
   factory Difficulty.fromJson(Map<String, dynamic> j) => Difficulty(
-        level: MathLevelKind.values.byName(j['level']),
-        mode: DiffMode.values.byName(j['mode']),
-        count: j['count'] ?? 0,
-        min: j['min'] ?? 0,
-        max: j['max'] ?? 0,
-      );
+    level: MathLevelKind.values.byName(j['level']),
+    mode: DiffMode.values.byName(j['mode']),
+    count: j['count'] ?? 0,
+    min: j['min'] ?? 0,
+    max: j['max'] ?? 0,
+  );
 }
 
 /// Arithmetic puzzle: [variables] terms per question, and a mix of how many
@@ -125,12 +125,13 @@ class MathPuzzle implements Puzzle {
   List<Difficulty> levels;
 
   MathPuzzle({this.variables = 2, List<Difficulty>? levels})
-      : levels = levels ??
-            [
-              Difficulty(level: MathLevelKind.easy, count: 1),
-              Difficulty(level: MathLevelKind.medium, count: 0),
-              Difficulty(level: MathLevelKind.hard, count: 0),
-            ];
+    : levels =
+          levels ??
+          [
+            Difficulty(level: MathLevelKind.easy, count: 1),
+            Difficulty(level: MathLevelKind.medium, count: 0),
+            Difficulty(level: MathLevelKind.hard, count: 0),
+          ];
 
   Difficulty level(MathLevelKind k) => levels.firstWhere((d) => d.level == k);
 
@@ -142,21 +143,21 @@ class MathPuzzle implements Puzzle {
 
   @override
   MathPuzzle clone() => MathPuzzle(
-        variables: variables,
-        levels: levels.map((d) => d.clone()).toList(),
-      );
+    variables: variables,
+    levels: levels.map((d) => d.clone()).toList(),
+  );
 
   @override
   Map<String, dynamic> toJson() => {
-        'type': 'math',
-        'variables': variables,
-        'levels': levels.map((d) => d.toJson()).toList(),
-      };
+    'type': 'math',
+    'variables': variables,
+    'levels': levels.map((d) => d.toJson()).toList(),
+  };
 
   factory MathPuzzle.fromJson(Map<String, dynamic> j) => MathPuzzle(
-        variables: j['variables'] ?? 2,
-        levels: (j['levels'] as List)
-            .map((e) => Difficulty.fromJson(Map<String, dynamic>.from(e)))
-            .toList(),
-      );
+    variables: j['variables'] ?? 2,
+    levels: (j['levels'] as List)
+        .map((e) => Difficulty.fromJson(Map<String, dynamic>.from(e)))
+        .toList(),
+  );
 }

@@ -16,7 +16,21 @@ import '../widgets/app_widgets.dart';
 class PuzzleSolveScreen extends StatefulWidget {
   final Alarm alarm;
   final List<PuzzleStep> queue;
-  const PuzzleSolveScreen({required this.alarm, required this.queue, super.key});
+
+  /// See [RingingScreen.playInApp]. For a real alarm, [blockBack] prevents
+  /// backing out without solving, and [onStop] stops it and reschedules/disables.
+  final bool playInApp;
+  final bool blockBack;
+  final Future<void> Function()? onStop;
+
+  const PuzzleSolveScreen({
+    required this.alarm,
+    required this.queue,
+    this.playInApp = true,
+    this.blockBack = false,
+    this.onStop,
+    super.key,
+  });
 
   @override
   State<PuzzleSolveScreen> createState() => _PuzzleSolveScreenState();
@@ -31,13 +45,15 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
   @override
   void initState() {
     super.initState();
-    _audio.playForAlarm(widget.alarm, context.read<AppState>().pools);
+    if (widget.playInApp) {
+      _audio.playForAlarm(widget.alarm, context.read<AppState>().pools);
+    }
   }
 
   @override
   void dispose() {
     _input.dispose();
-    _audio.stop();
+    if (widget.playInApp) _audio.stop();
     super.dispose();
   }
 
@@ -59,7 +75,7 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
     }
 
     if (_idx + 1 >= widget.queue.length) {
-      Navigator.of(context).pop(); // solved everything -> dismiss
+      _finish(); // solved everything -> dismiss
     } else {
       setState(() {
         _idx++;
@@ -69,38 +85,51 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
     }
   }
 
+  Future<void> _finish() async {
+    await widget.onStop?.call();
+    if (mounted) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final step = _step;
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
-          child: Column(
-            children: [
-              Text(
-                'PUZZLE ${_idx + 1} OF ${widget.queue.length}',
-                style: TextStyle(
-                  fontSize: 12,
-                  letterSpacing: 0.5,
-                  color: AppColors.w(0.4),
+    return PopScope(
+      canPop: !widget.blockBack,
+      child: Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+            child: Column(
+              children: [
+                Text(
+                  'PUZZLE ${_idx + 1} OF ${widget.queue.length}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    letterSpacing: 0.5,
+                    color: AppColors.w(0.4),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (step is RewriteStep) ..._rewrite(step),
-                    if (step is MathStep) ..._math(step),
-                    if (_error.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      Text(_error,
-                          style: TextStyle(fontSize: 13, color: AppColors.w(0.55))),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (step is RewriteStep) ..._rewrite(step),
+                      if (step is MathStep) ..._math(step),
+                      if (_error.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        Text(
+                          _error,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.w(0.55),
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -109,8 +138,14 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
 
   List<Widget> _rewrite(RewriteStep step) {
     return [
-      Text('REWRITE THIS',
-          style: TextStyle(fontSize: 12, letterSpacing: 0.5, color: AppColors.w(0.4))),
+      Text(
+        'REWRITE THIS',
+        style: TextStyle(
+          fontSize: 12,
+          letterSpacing: 0.5,
+          color: AppColors.w(0.4),
+        ),
+      ),
       const SizedBox(height: 20),
       Text(
         step.target,
@@ -124,10 +159,7 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
         ),
       ),
       const SizedBox(height: 20),
-      _inputField(
-        hint: 'Type it exactly',
-        mono: true,
-      ),
+      _inputField(hint: 'Type it exactly', mono: true),
       const SizedBox(height: 20),
       _submitButton(),
     ];
@@ -135,13 +167,23 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
 
   List<Widget> _math(MathStep step) {
     return [
-      Text('SOLVE',
-          style: TextStyle(fontSize: 12, letterSpacing: 0.5, color: AppColors.w(0.4))),
+      Text(
+        'SOLVE',
+        style: TextStyle(
+          fontSize: 12,
+          letterSpacing: 0.5,
+          color: AppColors.w(0.4),
+        ),
+      ),
       const SizedBox(height: 20),
       Text(
         step.text,
         textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w300, color: Colors.white),
+        style: const TextStyle(
+          fontSize: 30,
+          fontWeight: FontWeight.w300,
+          color: Colors.white,
+        ),
       ),
       const SizedBox(height: 20),
       _inputField(
@@ -178,7 +220,10 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
           hintStyle: TextStyle(color: AppColors.w(0.35)),
           filled: true,
           fillColor: AppColors.surface,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: AppColors.w(0.12)),

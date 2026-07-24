@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.firstnode.firstnode"
-    compileSdk = flutter.compileSdkVersion
+    // The `alarm` package's dependency (flutter_fgbg) requires compiling against
+    // API 35+. Flutter's default is 34, so we pin to 36 (installed SDK).
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -19,8 +21,9 @@ android {
         applicationId = "com.firstnode.firstnode"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = flutter.minSdkVersion // the `alarm` package requires API 23+
         targetSdk = flutter.targetSdkVersion
+        multiDexEnabled = true
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

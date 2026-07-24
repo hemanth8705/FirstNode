@@ -26,8 +26,9 @@ class EditAlarmScreen extends StatefulWidget {
 
 class _EditAlarmScreenState extends State<EditAlarmScreen> {
   late final Alarm draft = widget.draft;
-  late final TextEditingController _labelCtrl =
-      TextEditingController(text: draft.label);
+  late final TextEditingController _labelCtrl = TextEditingController(
+    text: draft.label,
+  );
 
   @override
   void dispose() {
@@ -43,13 +44,13 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
   void _decMinute() => setState(() => draft.minute = (draft.minute + 55) % 60);
 
   void _toggleDay(int d) => setState(() {
-        if (draft.days.contains(d)) {
-          draft.days.remove(d);
-        } else {
-          draft.days.add(d);
-        }
-        draft.days.sort();
-      });
+    if (draft.days.contains(d)) {
+      draft.days.remove(d);
+    } else {
+      draft.days.add(d);
+    }
+    draft.days.sort();
+  });
 
   // -------------------------------------------------------------- Save ------
 
@@ -157,7 +158,10 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(
                             'Delete alarm',
-                            style: TextStyle(color: AppColors.w(0.4), fontSize: 14),
+                            style: TextStyle(
+                              color: AppColors.w(0.4),
+                              fontSize: 14,
+                            ),
                           ),
                         ),
                       ),
@@ -200,15 +204,22 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
     );
   }
 
-  Widget _timeColumn(String value, {required VoidCallback onUp, required VoidCallback onDown}) {
+  Widget _timeColumn(
+    String value, {
+    required VoidCallback onUp,
+    required VoidCallback onDown,
+  }) {
     Widget arrow(String glyph, VoidCallback onTap) => GestureDetector(
-          onTap: onTap,
-          behavior: HitTestBehavior.opaque,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
-            child: Text(glyph, style: TextStyle(fontSize: 18, color: AppColors.w(0.5))),
-          ),
-        );
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+        child: Text(
+          glyph,
+          style: TextStyle(fontSize: 18, color: AppColors.w(0.5)),
+        ),
+      ),
+    );
     return Column(
       children: [
         arrow('▲', onUp),
@@ -284,7 +295,10 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
             hintStyle: TextStyle(color: AppColors.w(0.35)),
             filled: true,
             fillColor: AppColors.surface,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: AppColors.w(0.08)),
@@ -330,7 +344,11 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
           const SizedBox(height: 12),
           Text(
             'A random song from your library will play each time this alarm rings.',
-            style: TextStyle(color: AppColors.w(0.4), fontSize: 13, height: 1.5),
+            style: TextStyle(
+              color: AppColors.w(0.4),
+              fontSize: 13,
+              height: 1.5,
+            ),
           ),
         ]);
       case SoundMode.pool:
@@ -338,12 +356,17 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
           const SizedBox(height: 12),
           AppCard(
             onTap: _openPoolPicker,
-            child: _rowWithChevron(app.poolById(draft.poolId)?.name ?? 'Choose a pool'),
+            child: _rowWithChevron(
+              app.poolById(draft.poolId)?.name ?? 'Choose a pool',
+            ),
           ),
         ]);
     }
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
   }
 
   Widget _rowWithChevron(String text) {
@@ -363,10 +386,14 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Start ${fmtMMSS(draft.start)}',
-                style: TextStyle(color: AppColors.w(0.45), fontSize: 12)),
-            Text('End ${fmtMMSS(draft.end)}',
-                style: TextStyle(color: AppColors.w(0.45), fontSize: 12)),
+            Text(
+              'Start ${fmtMMSS(draft.start)}',
+              style: TextStyle(color: AppColors.w(0.45), fontSize: 12),
+            ),
+            Text(
+              'End ${fmtMMSS(draft.end)}',
+              style: TextStyle(color: AppColors.w(0.45), fontSize: 12),
+            ),
           ],
         ),
         Slider(
@@ -397,8 +424,10 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const SectionLabel('VOLUME'),
-            Text('${draft.volume}%',
-                style: TextStyle(color: AppColors.w(0.55), fontSize: 12)),
+            Text(
+              '${draft.volume}%',
+              style: TextStyle(color: AppColors.w(0.55), fontSize: 12),
+            ),
           ],
         ),
         Slider(
@@ -436,18 +465,37 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Column(
               children: [
-                _gradualRow('Ramp duration', '${g.duration}s',
-                    onDec: () => setState(() => g.duration = (g.duration - 10).clamp(10, 300)),
-                    onInc: () => setState(() => g.duration = (g.duration + 10).clamp(10, 300)),
-                    showDivider: true),
-                _gradualRow('Every', '${g.interval}s',
-                    onDec: () => setState(() => g.interval = (g.interval - 5).clamp(5, 60)),
-                    onInc: () => setState(() => g.interval = (g.interval + 5).clamp(5, 60)),
-                    showDivider: true),
-                _gradualRow('Increase by', '${g.step}%',
-                    onDec: () => setState(() => g.step = (g.step - 1).clamp(1, 20)),
-                    onInc: () => setState(() => g.step = (g.step + 1).clamp(1, 20)),
-                    showDivider: false),
+                _gradualRow(
+                  'Ramp duration',
+                  '${g.duration}s',
+                  onDec: () => setState(
+                    () => g.duration = (g.duration - 10).clamp(10, 300),
+                  ),
+                  onInc: () => setState(
+                    () => g.duration = (g.duration + 10).clamp(10, 300),
+                  ),
+                  showDivider: true,
+                ),
+                _gradualRow(
+                  'Every',
+                  '${g.interval}s',
+                  onDec: () => setState(
+                    () => g.interval = (g.interval - 5).clamp(5, 60),
+                  ),
+                  onInc: () => setState(
+                    () => g.interval = (g.interval + 5).clamp(5, 60),
+                  ),
+                  showDivider: true,
+                ),
+                _gradualRow(
+                  'Increase by',
+                  '${g.step}%',
+                  onDec: () =>
+                      setState(() => g.step = (g.step - 1).clamp(1, 20)),
+                  onInc: () =>
+                      setState(() => g.step = (g.step + 1).clamp(1, 20)),
+                  showDivider: false,
+                ),
               ],
             ),
           ),
@@ -456,12 +504,19 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
     );
   }
 
-  Widget _gradualRow(String label, String display,
-      {required VoidCallback onDec, required VoidCallback onInc, required bool showDivider}) {
+  Widget _gradualRow(
+    String label,
+    String display, {
+    required VoidCallback onDec,
+    required VoidCallback onInc,
+    required bool showDivider,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: showDivider
-          ? BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.w(0.06))))
+          ? BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppColors.w(0.06))),
+            )
           : null,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -488,10 +543,15 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(p.title, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                    Text(
+                      p.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
                     const SizedBox(height: 2),
-                    Text(summarizePuzzle(p),
-                        style: TextStyle(color: AppColors.w(0.4), fontSize: 12)),
+                    Text(
+                      summarizePuzzle(p),
+                      style: TextStyle(color: AppColors.w(0.4), fontSize: 12),
+                    ),
                   ],
                 ),
               ),
@@ -500,7 +560,11 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
                 behavior: HitTestBehavior.opaque,
                 child: Padding(
                   padding: const EdgeInsets.all(6),
-                  child: Icon(Icons.delete_outline, size: 18, color: AppColors.w(0.35)),
+                  child: Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: AppColors.w(0.35),
+                  ),
                 ),
               ),
             ],
@@ -519,12 +583,17 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
         Row(
           children: [
             Expanded(
-              child: _outlineButton('+ Rewrite puzzle',
-                  () => _addPuzzle(RewritePuzzle(length: 8))),
+              child: _outlineButton(
+                '+ Rewrite puzzle',
+                () => _addPuzzle(RewritePuzzle(length: 8)),
+              ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _outlineButton('+ Math puzzle', () => _addPuzzle(MathPuzzle())),
+              child: _outlineButton(
+                '+ Math puzzle',
+                () => _addPuzzle(MathPuzzle()),
+              ),
             ),
           ],
         ),
@@ -542,7 +611,10 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.w(0.15)),
         ),
-        child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 13)),
+        child: Text(
+          label,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+        ),
       ),
     );
   }

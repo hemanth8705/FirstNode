@@ -21,21 +21,25 @@ class Gradual {
   });
 
   Gradual clone() => Gradual(
-      enabled: enabled, duration: duration, interval: interval, step: step);
+    enabled: enabled,
+    duration: duration,
+    interval: interval,
+    step: step,
+  );
 
   Map<String, dynamic> toJson() => {
-        'enabled': enabled,
-        'duration': duration,
-        'interval': interval,
-        'step': step,
-      };
+    'enabled': enabled,
+    'duration': duration,
+    'interval': interval,
+    'step': step,
+  };
 
   factory Gradual.fromJson(Map<String, dynamic> j) => Gradual(
-        enabled: j['enabled'] ?? false,
-        duration: j['duration'] ?? 60,
-        interval: j['interval'] ?? 10,
-        step: j['step'] ?? 5,
-      );
+    enabled: j['enabled'] ?? false,
+    duration: j['duration'] ?? 60,
+    interval: j['interval'] ?? 10,
+    step: j['step'] ?? 5,
+  );
 }
 
 class Alarm {
@@ -71,64 +75,64 @@ class Alarm {
     this.volume = 70,
     Gradual? gradual,
     List<Puzzle>? puzzles,
-  })  : days = days ?? [],
-        gradual = gradual ?? Gradual(),
-        puzzles = puzzles ?? [];
+  }) : days = days ?? [],
+       gradual = gradual ?? Gradual(),
+       puzzles = puzzles ?? [];
 
   /// Minutes since midnight — used to sort alarms by time.
   int get minutesOfDay => hour * 60 + minute;
 
   /// Deep copy for editing (so Cancel can discard changes safely).
   Alarm clone() => Alarm(
-        id: id,
-        hour: hour,
-        minute: minute,
-        label: label,
-        days: List<int>.of(days),
-        enabled: enabled,
-        soundMode: soundMode,
-        songName: songName,
-        poolId: poolId,
-        start: start,
-        end: end,
-        volume: volume,
-        gradual: gradual.clone(),
-        puzzles: puzzles.map((p) => p.clone()).toList(),
-      );
+    id: id,
+    hour: hour,
+    minute: minute,
+    label: label,
+    days: List<int>.of(days),
+    enabled: enabled,
+    soundMode: soundMode,
+    songName: songName,
+    poolId: poolId,
+    start: start,
+    end: end,
+    volume: volume,
+    gradual: gradual.clone(),
+    puzzles: puzzles.map((p) => p.clone()).toList(),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'hour': hour,
-        'minute': minute,
-        'label': label,
-        'days': days,
-        'enabled': enabled,
-        'soundMode': soundMode.name,
-        'songName': songName,
-        'poolId': poolId,
-        'start': start,
-        'end': end,
-        'volume': volume,
-        'gradual': gradual.toJson(),
-        'puzzles': puzzles.map((p) => p.toJson()).toList(),
-      };
+    'id': id,
+    'hour': hour,
+    'minute': minute,
+    'label': label,
+    'days': days,
+    'enabled': enabled,
+    'soundMode': soundMode.name,
+    'songName': songName,
+    'poolId': poolId,
+    'start': start,
+    'end': end,
+    'volume': volume,
+    'gradual': gradual.toJson(),
+    'puzzles': puzzles.map((p) => p.toJson()).toList(),
+  };
 
   factory Alarm.fromJson(Map<String, dynamic> j) => Alarm(
-        id: j['id'],
-        hour: j['hour'],
-        minute: j['minute'],
-        label: j['label'] ?? '',
-        days: (j['days'] as List).map((e) => e as int).toList(),
-        enabled: j['enabled'] ?? true,
-        soundMode: SoundMode.values.byName(j['soundMode']),
-        songName: j['songName'],
-        poolId: j['poolId'],
-        start: j['start'] ?? 0,
-        end: j['end'] ?? 60,
-        volume: j['volume'] ?? 70,
-        gradual: Gradual.fromJson(Map<String, dynamic>.from(j['gradual'])),
-        puzzles: (j['puzzles'] as List)
-            .map((e) => Puzzle.fromJson(Map<String, dynamic>.from(e)))
-            .toList(),
-      );
+    id: j['id'],
+    hour: j['hour'],
+    minute: j['minute'],
+    label: j['label'] ?? '',
+    days: (j['days'] as List).map((e) => e as int).toList(),
+    enabled: j['enabled'] ?? true,
+    soundMode: SoundMode.values.byName(j['soundMode']),
+    songName: j['songName'],
+    poolId: j['poolId'],
+    start: j['start'] ?? 0,
+    end: j['end'] ?? 60,
+    volume: j['volume'] ?? 70,
+    gradual: Gradual.fromJson(Map<String, dynamic>.from(j['gradual'])),
+    puzzles: (j['puzzles'] as List)
+        .map((e) => Puzzle.fromJson(Map<String, dynamic>.from(e)))
+        .toList(),
+  );
 }

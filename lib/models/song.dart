@@ -16,9 +16,21 @@ class Song {
 /// The names/durations here must match the audio files generated under
 /// `assets/sounds/` (see DEVLOG "bundled tones" step).
 const List<Song> kSongCatalog = [
-  Song(name: 'Gentle Chime', duration: 12, asset: 'assets/sounds/gentle_chime.wav'),
-  Song(name: 'Classic Beep', duration: 10, asset: 'assets/sounds/classic_beep.wav'),
-  Song(name: 'Morning Rise', duration: 15, asset: 'assets/sounds/morning_rise.wav'),
+  Song(
+    name: 'Gentle Chime',
+    duration: 12,
+    asset: 'assets/sounds/gentle_chime.wav',
+  ),
+  Song(
+    name: 'Classic Beep',
+    duration: 10,
+    asset: 'assets/sounds/classic_beep.wav',
+  ),
+  Song(
+    name: 'Morning Rise',
+    duration: 15,
+    asset: 'assets/sounds/morning_rise.wav',
+  ),
   Song(name: 'Soft Pulse', duration: 12, asset: 'assets/sounds/soft_pulse.wav'),
   Song(name: 'Radar', duration: 10, asset: 'assets/sounds/radar.wav'),
   Song(name: 'Sunrise', duration: 15, asset: 'assets/sounds/sunrise.wav'),

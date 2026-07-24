@@ -21,7 +21,9 @@ class PoolPickerScreen extends StatelessWidget {
       songs: [],
     );
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => PoolEditorScreen(pool: pool, isNew: true)),
+      MaterialPageRoute(
+        builder: (_) => PoolEditorScreen(pool: pool, isNew: true),
+      ),
     );
   }
 
@@ -48,21 +50,26 @@ class PoolPickerScreen extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 child: const Padding(
                   padding: EdgeInsets.all(4),
-                  child: Text('+ New',
-                      style: TextStyle(color: Colors.white, fontSize: 14)),
+                  child: Text(
+                    '+ New',
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
                 ),
               ),
             ),
             Expanded(
               child: app.pools.isEmpty
                   ? Center(
-                      child: Text('No pools yet. Tap + New.',
-                          style: TextStyle(color: AppColors.w(0.4), fontSize: 15)),
+                      child: Text(
+                        'No pools yet. Tap + New.',
+                        style: TextStyle(color: AppColors.w(0.4), fontSize: 15),
+                      ),
                     )
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                      children:
-                          app.pools.map((p) => _poolRow(context, p)).toList(),
+                      children: app.pools
+                          .map((p) => _poolRow(context, p))
+                          .toList(),
                     ),
             ),
           ],
@@ -86,11 +93,15 @@ class PoolPickerScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(p.name,
-                      style: const TextStyle(color: Colors.white, fontSize: 14)),
+                  Text(
+                    p.name,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
                   const SizedBox(height: 2),
-                  Text('${p.songs.length} songs · ${p.order.name}',
-                      style: TextStyle(color: AppColors.w(0.4), fontSize: 12)),
+                  Text(
+                    '${p.songs.length} songs · ${p.order.name}',
+                    style: TextStyle(color: AppColors.w(0.4), fontSize: 12),
+                  ),
                 ],
               ),
             ),
@@ -98,7 +109,10 @@ class PoolPickerScreen extends StatelessWidget {
           if (selectedPoolId == p.id)
             const Padding(
               padding: EdgeInsets.only(right: 14),
-              child: Text('●', style: TextStyle(color: Colors.white, fontSize: 13)),
+              child: Text(
+                '●',
+                style: TextStyle(color: Colors.white, fontSize: 13),
+              ),
             ),
           GestureDetector(
             onTap: () => _editPool(context, p),
@@ -108,8 +122,10 @@ class PoolPickerScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(100),
                 border: Border.all(color: AppColors.w(0.15)),
               ),
-              child: Text('Edit',
-                  style: TextStyle(color: AppColors.w(0.7), fontSize: 12)),
+              child: Text(
+                'Edit',
+                style: TextStyle(color: AppColors.w(0.7), fontSize: 12),
+              ),
             ),
           ),
         ],

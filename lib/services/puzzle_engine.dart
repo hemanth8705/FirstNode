@@ -50,13 +50,15 @@ class PuzzleEngine {
   /// Division is only used when it divides evenly (falls back to + otherwise).
   MathStep buildQuestion(MathLevelKind level, int numVars) {
     final n = max(2, numVars);
-    final terms =
-        List.generate(n, (_) => _randInt(1, level == MathLevelKind.hard ? 9 : 12));
+    final terms = List.generate(
+      n,
+      (_) => _randInt(1, level == MathLevelKind.hard ? 9 : 12),
+    );
     final pool = level == MathLevelKind.easy
         ? ['+', '-']
         : level == MathLevelKind.medium
-            ? ['+', '-', '×', '÷']
-            : ['+', '-', '×', '÷', '^'];
+        ? ['+', '-', '×', '÷']
+        : ['+', '-', '×', '÷', '^'];
 
     num result = terms[0];
     final parts = <String>[terms[0].toString()];

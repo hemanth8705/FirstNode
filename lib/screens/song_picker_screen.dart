@@ -38,7 +38,9 @@ class SongPickerScreen extends StatelessWidget {
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                children: kSongCatalog.map((s) => _songRow(context, s)).toList(),
+                children: kSongCatalog
+                    .map((s) => _songRow(context, s))
+                    .toList(),
               ),
             ),
             if (mode == SongPickerMode.poolAdd)
@@ -56,8 +58,7 @@ class SongPickerScreen extends StatelessWidget {
   }
 
   Widget _songRow(BuildContext context, Song s) {
-    final selected =
-        mode == SongPickerMode.specific && selectedName == s.name;
+    final selected = mode == SongPickerMode.specific && selectedName == s.name;
     return GestureDetector(
       onTap: () {
         if (mode == SongPickerMode.specific) {
@@ -94,22 +95,32 @@ class SongPickerScreen extends StatelessWidget {
                     color: AppColors.surfaceAlt2,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.music_note, size: 16, color: AppColors.w(0.25)),
+                  child: Icon(
+                    Icons.music_note,
+                    size: 16,
+                    color: AppColors.w(0.25),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(s.name,
-                        style: const TextStyle(color: Colors.white, fontSize: 14)),
-                    Text(fmtMMSS(s.duration),
-                        style: TextStyle(color: AppColors.w(0.4), fontSize: 12)),
+                    Text(
+                      s.name,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                    Text(
+                      fmtMMSS(s.duration),
+                      style: TextStyle(color: AppColors.w(0.4), fontSize: 12),
+                    ),
                   ],
                 ),
               ],
             ),
-            Text(selected ? '●' : '',
-                style: const TextStyle(color: Colors.white, fontSize: 13)),
+            Text(
+              selected ? '●' : '',
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
           ],
         ),
       ),

@@ -18,8 +18,9 @@ class AudioService {
     await _player.setVolume((volumePercent / 100).clamp(0.0, 1.0));
     // audioplayers' AssetSource is relative to the `assets/` folder, so we
     // strip the leading "assets/" from the catalog path.
-    final rel =
-        asset.startsWith('assets/') ? asset.substring('assets/'.length) : asset;
+    final rel = asset.startsWith('assets/')
+        ? asset.substring('assets/'.length)
+        : asset;
     await _player.play(AssetSource(rel));
   }
 
@@ -44,8 +45,9 @@ class AudioService {
             break;
           }
         }
-        final firstName =
-            (pool != null && pool.songs.isNotEmpty) ? pool.songs.first.name : null;
+        final firstName = (pool != null && pool.songs.isNotEmpty)
+            ? pool.songs.first.name
+            : null;
         await playSongByName(firstName, volume: alarm.volume);
     }
   }

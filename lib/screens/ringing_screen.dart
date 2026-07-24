@@ -12,7 +12,19 @@ import '../widgets/app_widgets.dart';
 /// the label, and a Dismiss button. Audio plays while this screen is open.
 class RingingScreen extends StatefulWidget {
   final Alarm alarm;
-  const RingingScreen({required this.alarm, super.key});
+
+  /// When true (the in-app TEST) this screen plays/stops the tone itself. When
+  /// false (a real fired alarm) the `alarm` package is already playing audio, so
+  /// we don't; [onStop] is called on dismiss to stop it and reschedule/disable.
+  final bool playInApp;
+  final Future<void> Function()? onStop;
+
+  const RingingScreen({
+    required this.alarm,
+    this.playInApp = true,
+    this.onStop,
+    super.key,
+  });
 
   @override
   State<RingingScreen> createState() => _RingingScreenState();
@@ -29,15 +41,23 @@ class _RingingScreenState extends State<RingingScreen>
   @override
   void initState() {
     super.initState();
-    // Start ringing. Read pools once here (listen:false) to pick the tone.
-    _audio.playForAlarm(widget.alarm, context.read<AppState>().pools);
+    // For the in-app TEST we start the tone here; for a real alarm the native
+    // `alarm` package is already playing it.
+    if (widget.playInApp) {
+      _audio.playForAlarm(widget.alarm, context.read<AppState>().pools);
+    }
   }
 
   @override
   void dispose() {
     _pulse.dispose();
-    _audio.stop();
+    if (widget.playInApp) _audio.stop();
     super.dispose();
+  }
+
+  Future<void> _onDismiss() async {
+    await widget.onStop?.call();
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -91,7 +111,7 @@ class _RingingScreenState extends State<RingingScreen>
                   child: PrimaryButton(
                     label: 'Dismiss',
                     radius: 100,
-                    onTap: () => Navigator.of(context).pop(),
+                    onTap: _onDismiss,
                   ),
                 ),
               ],

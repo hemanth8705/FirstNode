@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/alarm.dart';
@@ -18,6 +20,14 @@ class AppState extends ChangeNotifier {
   List<Pool> pools = [];
   bool loaded = false;
 
+  /// Completes when the first data load finishes. The alarm ring handler waits
+  /// on this in case the app was cold-started by a firing alarm.
+  final Completer<void> _ready = Completer<void>();
+  Future<void> get ready => _ready.future;
+
+  /// Invoked after any change to the alarm list, so the scheduler can re-sync.
+  void Function()? onAlarmsChanged;
+
   /// Called once at startup: load saved data, or seed sample data on first run.
   Future<void> init() async {
     final data = await _storage.load();
@@ -30,6 +40,7 @@ class AppState extends ChangeNotifier {
     }
     _sortAlarms();
     loaded = true;
+    if (!_ready.isCompleted) _ready.complete();
     notifyListeners();
   }
 
@@ -40,8 +51,9 @@ class AppState extends ChangeNotifier {
 
   // ---------------------------------------------------------------- Alarms ---
 
-  int _nextAlarmId() =>
-      alarms.isEmpty ? 1 : alarms.map((a) => a.id).reduce((a, b) => a > b ? a : b) + 1;
+  int _nextAlarmId() => alarms.isEmpty
+      ? 1
+      : alarms.map((a) => a.id).reduce((a, b) => a > b ? a : b) + 1;
 
   /// Insert a new alarm (id <= 0) or replace an existing one by id.
   Future<void> upsertAlarm(Alarm alarm) async {
@@ -59,12 +71,14 @@ class AppState extends ChangeNotifier {
     _sortAlarms();
     await _persist();
     notifyListeners();
+    onAlarmsChanged?.call();
   }
 
   Future<void> deleteAlarm(int id) async {
     alarms.removeWhere((a) => a.id == id);
     await _persist();
     notifyListeners();
+    onAlarmsChanged?.call();
   }
 
   Future<void> toggleAlarm(int id) async {
@@ -73,6 +87,19 @@ class AppState extends ChangeNotifier {
       alarms[i].enabled = !alarms[i].enabled;
       await _persist();
       notifyListeners();
+      onAlarmsChanged?.call();
+    }
+  }
+
+  /// Force an alarm's enabled state (used to turn off a "once" alarm after it
+  /// has rung). No-op if already in that state.
+  Future<void> setEnabled(int id, bool value) async {
+    final i = alarms.indexWhere((a) => a.id == id);
+    if (i >= 0 && alarms[i].enabled != value) {
+      alarms[i].enabled = value;
+      await _persist();
+      notifyListeners();
+      onAlarmsChanged?.call();
     }
   }
 
@@ -152,9 +179,22 @@ class AppState extends ChangeNotifier {
           MathPuzzle(
             variables: 2,
             levels: [
-              Difficulty(level: MathLevelKind.easy, mode: DiffMode.fixed, count: 2),
-              Difficulty(level: MathLevelKind.medium, mode: DiffMode.random, min: 1, max: 2),
-              Difficulty(level: MathLevelKind.hard, mode: DiffMode.fixed, count: 0),
+              Difficulty(
+                level: MathLevelKind.easy,
+                mode: DiffMode.fixed,
+                count: 2,
+              ),
+              Difficulty(
+                level: MathLevelKind.medium,
+                mode: DiffMode.random,
+                min: 1,
+                max: 2,
+              ),
+              Difficulty(
+                level: MathLevelKind.hard,
+                mode: DiffMode.fixed,
+                count: 0,
+              ),
             ],
           ),
         ],
@@ -182,7 +222,13 @@ class AppState extends ChangeNotifier {
         end: 10,
         volume: 50,
         puzzles: [
-          RewritePuzzle(upper: true, lower: true, numbers: false, special: false, length: 12),
+          RewritePuzzle(
+            upper: true,
+            lower: true,
+            numbers: false,
+            special: false,
+            length: 12,
+          ),
         ],
       ),
     ];

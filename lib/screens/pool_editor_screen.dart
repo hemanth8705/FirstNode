@@ -22,8 +22,9 @@ class PoolEditorScreen extends StatefulWidget {
 
 class _PoolEditorScreenState extends State<PoolEditorScreen> {
   late final Pool draft = widget.pool;
-  late final TextEditingController _nameCtrl =
-      TextEditingController(text: draft.name);
+  late final TextEditingController _nameCtrl = TextEditingController(
+    text: draft.name,
+  );
   int? _expandedIndex;
 
   @override
@@ -48,12 +49,14 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
         builder: (_) => SongPickerScreen(
           mode: SongPickerMode.poolAdd,
           onAdd: (name) => setState(() {
-            draft.songs.add(PoolSong(
-              name: name,
-              start: 0,
-              end: songDuration(name),
-              volume: 80,
-            ));
+            draft.songs.add(
+              PoolSong(
+                name: name,
+                start: 0,
+                end: songDuration(name),
+                volume: 80,
+              ),
+            );
           }),
         ),
       ),
@@ -67,7 +70,11 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            EditHeader(title: 'Edit pool', onCancel: () => Navigator.of(context).pop(), onSave: _save),
+            EditHeader(
+              title: 'Edit pool',
+              onCancel: () => Navigator.of(context).pop(),
+              onSave: _save,
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
@@ -82,8 +89,10 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
                       hintStyle: TextStyle(color: AppColors.w(0.35)),
                       filled: true,
                       fillColor: AppColors.surface,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: AppColors.w(0.08)),
@@ -113,8 +122,10 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
                       GestureDetector(
                         onTap: _addSong,
                         behavior: HitTestBehavior.opaque,
-                        child: const Text('+ Add',
-                            style: TextStyle(color: Colors.white, fontSize: 13)),
+                        child: const Text(
+                          '+ Add',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
                       ),
                     ],
                   ),
@@ -127,8 +138,13 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
                       child: GestureDetector(
                         onTap: _delete,
                         behavior: HitTestBehavior.opaque,
-                        child: Text('Delete pool',
-                            style: TextStyle(color: AppColors.w(0.4), fontSize: 14)),
+                        child: Text(
+                          'Delete pool',
+                          style: TextStyle(
+                            color: AppColors.w(0.4),
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -166,8 +182,13 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(s.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 14)),
+                      Text(
+                        s.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         '${fmtMMSS(s.start)}–${fmtMMSS(s.end)} · ${s.volume}%',
@@ -184,7 +205,11 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
                   behavior: HitTestBehavior.opaque,
                   child: Padding(
                     padding: const EdgeInsets.all(4),
-                    child: Icon(Icons.close, size: 16, color: AppColors.w(0.35)),
+                    child: Icon(
+                      Icons.close,
+                      size: 16,
+                      color: AppColors.w(0.35),
+                    ),
                   ),
                 ),
               ],
@@ -195,10 +220,14 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Start ${fmtMMSS(s.start)}',
-                    style: TextStyle(color: AppColors.w(0.45), fontSize: 12)),
-                Text('End ${fmtMMSS(s.end)}',
-                    style: TextStyle(color: AppColors.w(0.45), fontSize: 12)),
+                Text(
+                  'Start ${fmtMMSS(s.start)}',
+                  style: TextStyle(color: AppColors.w(0.45), fontSize: 12),
+                ),
+                Text(
+                  'End ${fmtMMSS(s.end)}',
+                  style: TextStyle(color: AppColors.w(0.45), fontSize: 12),
+                ),
               ],
             ),
             Slider(
@@ -220,10 +249,14 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Volume',
-                    style: TextStyle(color: AppColors.w(0.45), fontSize: 12)),
-                Text('${s.volume}%',
-                    style: TextStyle(color: AppColors.w(0.45), fontSize: 12)),
+                Text(
+                  'Volume',
+                  style: TextStyle(color: AppColors.w(0.45), fontSize: 12),
+                ),
+                Text(
+                  '${s.volume}%',
+                  style: TextStyle(color: AppColors.w(0.45), fontSize: 12),
+                ),
               ],
             ),
             Slider(

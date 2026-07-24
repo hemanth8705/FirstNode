@@ -74,7 +74,11 @@ class HomeScreen extends StatelessWidget {
                         shape: BoxShape.circle,
                         color: Colors.white,
                       ),
-                      child: const Icon(Icons.add, color: AppColors.onAccent, size: 20),
+                      child: const Icon(
+                        Icons.add,
+                        color: AppColors.onAccent,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ],
@@ -82,24 +86,26 @@ class HomeScreen extends StatelessWidget {
             ),
             Expanded(
               child: !app.loaded
-                  ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                  ? const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    )
                   : app.alarms.isEmpty
-                      ? _buildEmpty()
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                          itemCount: app.alarms.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 10),
-                          itemBuilder: (_, i) {
-                            final a = app.alarms[i];
-                            return AlarmCard(
-                              alarm: a,
-                              soundSummary: app.soundSummary(a),
-                              onOpen: () => _openEdit(context, a),
-                              onToggle: () => app.toggleAlarm(a.id),
-                              onTest: () => startRing(context, a),
-                            );
-                          },
-                        ),
+                  ? _buildEmpty()
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      itemCount: app.alarms.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) {
+                        final a = app.alarms[i];
+                        return AlarmCard(
+                          alarm: a,
+                          soundSummary: app.soundSummary(a),
+                          onOpen: () => _openEdit(context, a),
+                          onToggle: () => app.toggleAlarm(a.id),
+                          onTest: () => startRing(context, a),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

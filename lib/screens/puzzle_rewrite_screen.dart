@@ -99,8 +99,13 @@ class _PuzzleRewriteScreenState extends State<PuzzleRewriteScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const SectionLabel('LENGTH'),
-                      Text('${p.length} chars',
-                          style: TextStyle(color: AppColors.w(0.55), fontSize: 12)),
+                      Text(
+                        '${p.length} chars',
+                        style: TextStyle(
+                          color: AppColors.w(0.55),
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
