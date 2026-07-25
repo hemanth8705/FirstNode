@@ -238,17 +238,17 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
             Slider(
               value: s.start.toDouble().clamp(0, max),
               max: max,
+              divisions: max > 0 ? max.toInt() : null,
               onChanged: (v) => setState(() {
-                final nv = (v / 5).round() * 5;
-                s.start = nv.clamp(0, s.end - 5).toInt();
+                s.start = v.round().clamp(0, s.end - 1).toInt();
               }),
             ),
             Slider(
               value: s.end.toDouble().clamp(0, max),
               max: max,
+              divisions: max > 0 ? max.toInt() : null,
               onChanged: (v) => setState(() {
-                final nv = (v / 5).round() * 5;
-                s.end = nv.clamp(s.start + 5, max.toInt()).toInt();
+                s.end = v.round().clamp(s.start + 1, max.toInt()).toInt();
               }),
             ),
             Row(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:marquee/marquee.dart';
 
 import '../theme/app_theme.dart';
 
@@ -15,6 +16,76 @@ class SectionLabel extends StatelessWidget {
     text.toUpperCase(),
     style: TextStyle(fontSize: 12, letterSpacing: 0.5, color: AppColors.w(0.4)),
   );
+}
+
+/// Shows [text] as plain left-aligned text if it fits the available width;
+/// otherwise scrolls it horizontally (marquee) so long filenames are fully
+/// readable instead of being truncated.
+class MarqueeOrText extends StatelessWidget {
+  final String text;
+  final TextStyle style;
+  const MarqueeOrText({required this.text, required this.style, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout();
+        if (painter.width <= constraints.maxWidth) {
+          return Align(alignment: Alignment.centerLeft, child: Text(text, style: style));
+        }
+        return Marquee(
+          text: text,
+          style: style,
+          blankSpace: 40,
+          velocity: 30,
+          pauseAfterRound: const Duration(seconds: 1),
+        );
+      },
+    );
+  }
+}
+
+/// A small circular Play/Pause button used for song previews.
+class PreviewButton extends StatelessWidget {
+  final bool playing;
+  final VoidCallback onTap;
+  final double size;
+  final bool filled;
+  const PreviewButton({
+    required this.playing,
+    required this.onTap,
+    this.size = 30,
+    this.filled = false,
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: filled ? Colors.white : Colors.transparent,
+          border: filled ? null : Border.all(color: AppColors.w(0.18)),
+        ),
+        child: Icon(
+          playing ? Icons.pause : Icons.play_arrow,
+          size: size * 0.53,
+          color: filled ? AppColors.onAccent : Colors.white,
+        ),
+      ),
+    );
+  }
 }
 
 /// A dark rounded panel with a hairline border — the app's basic "card".

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/alarm.dart';
 import '../models/puzzle.dart';
 import '../models/song.dart';
+import '../services/audio_service.dart';
 import '../services/formatters.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
@@ -38,9 +39,11 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
   );
   late final FixedExtentScrollController _minuteCtrl =
       FixedExtentScrollController(initialItem: draft.minute);
+  late final AudioService _audio = context.read<AudioService>();
 
   @override
   void dispose() {
+    _audio.stopPreview();
     _labelCtrl.dispose();
     _hourCtrl.dispose();
     _minuteCtrl.dispose();
@@ -327,7 +330,7 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
         options: const [
           SegmentOption(SoundMode.specific, 'Specific'),
           SegmentOption(SoundMode.random, 'Random'),
-          SegmentOption(SoundMode.pool, 'Pool'),
+          SegmentOption(SoundMode.pool, 'Pools'),
         ],
       ),
     ];
@@ -336,18 +339,22 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
       case SoundMode.specific:
         children.addAll([
           const SizedBox(height: 12),
-          AppCard(
-            onTap: _openSongPicker,
-            child: _rowWithChevron(draft.songName ?? 'Choose a song'),
-          ),
+          _selectedSongCard(),
           const SizedBox(height: 14),
           _trimSliders(),
         ]);
       case SoundMode.random:
         children.addAll([
           const SizedBox(height: 12),
+          AppCard(
+            onTap: _openPoolPicker,
+            child: _rowWithChevron(
+              app.poolById(draft.poolId)?.name ?? 'Choose a pool',
+            ),
+          ),
+          const SizedBox(height: 10),
           Text(
-            'A random song from your library will play each time this alarm rings.',
+            'A random song from the selected pool will play each time this alarm rings.',
             style: TextStyle(
               color: AppColors.w(0.4),
               fontSize: 13,
@@ -364,6 +371,15 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
               app.poolById(draft.poolId)?.name ?? 'Choose a pool',
             ),
           ),
+          const SizedBox(height: 10),
+          Text(
+            "Plays according to the pool's own order — Linear plays it in sequence, Shuffle picks randomly.",
+            style: TextStyle(
+              color: AppColors.w(0.4),
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
         ]);
     }
 
@@ -371,6 +387,82 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: children,
     );
+  }
+
+  /// The selected-song card for Specific mode: song name (scrolls if too long
+  /// to fit) on the left, a trim-aware preview Play/Pause button and a
+  /// chevron (both open the song picker) on the right.
+  Widget _selectedSongCard() {
+    final hasSong = draft.songName != null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: AppColors.cardBorder,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: _openSongPicker,
+              behavior: HitTestBehavior.opaque,
+              child: SizedBox(
+                height: 20,
+                child: MarqueeOrText(
+                  text: draft.songName ?? 'Choose a song',
+                  style: TextStyle(
+                    color: hasSong ? Colors.white : AppColors.w(0.5),
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          if (hasSong) _trimPreviewButton(),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _openSongPicker,
+            behavior: HitTestBehavior.opaque,
+            child: Icon(Icons.chevron_right, size: 18, color: AppColors.w(0.4)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _trimPreviewButton() {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_audio.previewingName, _audio.previewPlaying]),
+      builder: (context, _) => PreviewButton(
+        playing:
+            _audio.previewingName.value == draft.songName &&
+            _audio.previewPlaying.value,
+        size: 28,
+        filled: true,
+        onTap: _toggleEditPreview,
+      ),
+    );
+  }
+
+  /// Previews exactly the currently-selected start/end range — "hear what the
+  /// alarm will actually play." Toggling off stops (rather than pauses) since
+  /// the trim bounds can change between presses.
+  Future<void> _toggleEditPreview() async {
+    final isThis = _audio.previewingName.value == draft.songName;
+    final isPlaying = _audio.previewPlaying.value;
+    if (isThis && isPlaying) {
+      await _audio.stopPreview();
+    } else {
+      await _audio.preview(
+        context.read<AppState>().allSongs,
+        draft.songName,
+        startSec: draft.start,
+        endSec: draft.end,
+        volume: draft.volume,
+      );
+    }
   }
 
   Widget _rowWithChevron(String text) {
@@ -411,17 +503,17 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
         Slider(
           value: draft.start.toDouble().clamp(0, max.toDouble()),
           max: max.toDouble(),
+          divisions: max > 0 ? max : null,
           onChanged: (v) => setState(() {
-            final nv = (v / 5).round() * 5;
-            draft.start = nv.clamp(0, draft.end - 5).toInt();
+            draft.start = v.round().clamp(0, draft.end - 1).toInt();
           }),
         ),
         Slider(
           value: draft.end.toDouble().clamp(0, max.toDouble()),
           max: max.toDouble(),
+          divisions: max > 0 ? max : null,
           onChanged: (v) => setState(() {
-            final nv = (v / 5).round() * 5;
-            draft.end = nv.clamp(draft.start + 5, max).toInt();
+            draft.end = v.round().clamp(draft.start + 1, max).toInt();
           }),
         ),
       ],

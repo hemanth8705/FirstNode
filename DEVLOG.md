@@ -534,4 +534,85 @@ overflowing or wrapping):
 - `flutter analyze` → **No issues found.**
 - `flutter test` → passes.
 
+### 2026-07-25 — Song selection UX overhaul + Random-mode-uses-pool
+
+Six requested changes to how sounds are chosen and previewed.
+
+#### 1. Trim sliders: 1-second precision
+[lib/screens/edit_alarm_screen.dart](lib/screens/edit_alarm_screen.dart) and
+[lib/screens/pool_editor_screen.dart](lib/screens/pool_editor_screen.dart)'s
+start/end trim sliders rounded to 5-second steps (`(v/5).round()*5`); changed
+to `v.round()` with `divisions: <duration in seconds>` — every second is
+reachable, and the explicit `divisions` gives the same visual "snap" feedback
+the volume slider already had (unchanged, still 5% steps).
+
+#### 2. Song Picker: select-then-Done instead of pop-on-tap
+[lib/screens/song_picker_screen.dart](lib/screens/song_picker_screen.dart)
+converted from `StatelessWidget` to `StatefulWidget`. Tapping a song (Specific
+mode) now just highlights it (border + a checkmark) via local `_selected`
+state; a **Done** button in the header's top-right (`BackHeader`'s `trailing`
+slot) is what actually pops with the result. Pool-add mode keeps its existing
+"tap adds immediately, can add several" behavior, but its Done button moved
+from the bottom of the screen into the same header slot, so both modes now
+close the same way.
+
+#### 3 & 4. Song preview (list + trim-aware) — new `AudioService` API
+Both the song list and the Edit Alarm screen needed "tap to hear it" — the
+list previews a song from the start, Edit Alarm previews *exactly the
+currently-selected trim range* ("hear what the alarm will actually play").
+Built once, used in both places:
+- [lib/services/audio_service.dart](lib/services/audio_service.dart) —
+  `preview(allSongs, name, {startSec, endSec, volume})`: plays once (no loop,
+  unlike the looping alarm/TEST playback), seeks to `startSec`, and — if
+  `endSec` is given — listens to `onPositionChanged` and auto-pauses on
+  reaching it. `pausePreview`/`resumePreview`/`stopPreview` round out the API.
+  State (`previewingName`, `previewPlaying`) is exposed as `ValueNotifier`s so
+  any screen can reactively show the right icon without owning the state
+  itself — avoids each screen re-implementing "which song, is it playing."
+- [lib/widgets/app_widgets.dart](lib/widgets/app_widgets.dart) — new
+  `PreviewButton` (small circular Play/Pause) shared by both screens.
+- Trim preview toggles **play/stop** (not pause/resume): the trim bounds can
+  change between presses, so "resume from wherever it paused" would be
+  confusing once the range no longer matches. The list preview *does* use
+  real pause/resume, since nothing else changes while browsing.
+
+#### 4 (UI). Selected-song card redesign
+New `_selectedSongCard()` in
+[edit_alarm_screen.dart](lib/screens/edit_alarm_screen.dart) replaces the old
+chevron-row: slightly shorter padding, split into name (left) + trim-preview
+button + chevron (right). Long filenames scroll via a new
+[MarqueeOrText](lib/widgets/app_widgets.dart) widget (added the `marquee`
+package) that only scrolls when the text actually doesn't fit — measured with
+a `TextPainter` inside a `LayoutBuilder` — short names just render as normal
+left-aligned text, no unnecessary animation.
+
+#### 5 & 6. Random mode now requires a pool; label "Pool" → "Pools"
+Clarified with the user first, since "Random" and the existing "Pool" mode
+would otherwise become functionally identical: **Random** = pick a pool, then
+*always* shuffle-pick a song from it (ignores that pool's own order setting) —
+a quick "just shuffle this pool" shortcut. **Pools** (renamed from "Pool") =
+pick a pool, respect *its own* configured order (Linear = its first/configured
+song, Shuffle = random) — unchanged behavior, just relabeled and now with
+explanatory text distinguishing it from Random.
+- [lib/screens/edit_alarm_screen.dart](lib/screens/edit_alarm_screen.dart):
+  Random mode's UI now shows the same pool-picker row Pools mode does (reusing
+  `_openPoolPicker`, which already just sets `draft.poolId` — no new plumbing
+  needed there), plus mode-specific explanatory text.
+- [lib/services/alarm_scheduler.dart](lib/services/alarm_scheduler.dart) and
+  [lib/services/audio_service.dart](lib/services/audio_service.dart): both
+  gained a shared `_findPool` helper; `random` now looks up `a.poolId` and
+  shuffles within `pool.songs` (falls back to any song across the whole
+  catalog if no pool is set — covers alarms saved before this change).
+- [lib/state/app_state.dart](lib/state/app_state.dart)'s `soundSummary` now
+  shows the pool name for Random mode too ("Random · Weekday Mix").
+- While touching this: fixed a pre-existing inconsistency where `AudioService`
+  (TEST/in-app ring) ignored a pool's Shuffle order and always played its
+  first song, while `AlarmScheduler` (real alarms) respected it correctly —
+  TEST now matches real-alarm behavior.
+
+#### Verified
+- `flutter analyze` → **No issues found.**
+- `flutter test` → passes.
+- `flutter build apk --debug` → succeeds.
+
 _(further entries appended below as each piece is built)_

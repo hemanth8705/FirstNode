@@ -36,6 +36,14 @@ class AlarmScheduler {
     return base.add(const Duration(days: 1)); // safety fallback
   }
 
+  Pool? _findPool(String? poolId, List<Pool> pools) {
+    if (poolId == null) return null;
+    for (final p in pools) {
+      if (p.id == poolId) return p;
+    }
+    return null;
+  }
+
   // Note: the `alarm` package's `assetAudioPath` accepts either a Flutter
   // asset key or an absolute device file path, so bundled and imported tones
   // (see models/song.dart) both just work by passing `song.asset` through.
@@ -45,15 +53,18 @@ class AlarmScheduler {
         return songByName(allSongs, a.songName)?.asset ??
             kSongCatalog.first.asset;
       case model.SoundMode.random:
+        final pool = _findPool(a.poolId, pools);
+        if (pool != null && pool.songs.isNotEmpty) {
+          // Random mode always shuffles, regardless of the pool's own order.
+          final chosen = (pool.songs.toList()..shuffle()).first;
+          return songByName(allSongs, chosen.name)?.asset ??
+              kSongCatalog.first.asset;
+        }
+        // No pool chosen (e.g. an alarm saved before this mode required one)
+        // — fall back to any song so the alarm still rings with something.
         return (allSongs.toList()..shuffle()).first.asset;
       case model.SoundMode.pool:
-        Pool? pool;
-        for (final p in pools) {
-          if (p.id == a.poolId) {
-            pool = p;
-            break;
-          }
-        }
+        final pool = _findPool(a.poolId, pools);
         if (pool != null && pool.songs.isNotEmpty) {
           final chosen = pool.order == PoolOrder.shuffle
               ? (pool.songs.toList()..shuffle()).first

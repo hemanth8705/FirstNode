@@ -169,10 +169,11 @@ class AppState extends ChangeNotifier {
       case SoundMode.specific:
         return a.songName != null ? 'Song · ${a.songName}' : 'Song';
       case SoundMode.random:
-        return 'Random song';
+        final p = poolById(a.poolId);
+        return p != null ? 'Random · ${p.name}' : 'Random song';
       case SoundMode.pool:
         final p = poolById(a.poolId);
-        return p != null ? 'Pool · ${p.name}' : 'Pool';
+        return p != null ? 'Pools · ${p.name}' : 'Pools';
     }
   }
 
