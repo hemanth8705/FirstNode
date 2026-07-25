@@ -9,7 +9,7 @@ import '../models/song.dart';
 
 /// Lets the user pick an audio file from their phone and turns it into a
 /// [Song] usable everywhere the bundled tones are (specific/random/pool sound
-/// modes, real scheduled alarms, and TEST).
+/// modes and real scheduled alarms).
 class SongImportService {
   /// Opens the system file picker filtered to audio, copies the chosen file
   /// into the app's own storage (so it keeps working across app restarts and

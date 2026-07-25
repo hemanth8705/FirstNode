@@ -8,6 +8,14 @@ import '../models/pool.dart';
 import '../models/song.dart';
 import 'formatters.dart';
 
+/// The native alarm engine can only loop a single fixed audio file — it has no
+/// concept of "play song A for 15s, then song B, then loop back." For "Pools"
+/// mode (which needs exactly that), the native side plays this true-silence
+/// placeholder instead; [AudioService.playPool] drives the actual audible
+/// sequencing in Dart once the ring/puzzle screen mounts (see main.dart's
+/// `_onRing`, which sets `playInApp: true` specifically for pool-mode alarms).
+const String kSilentPlaceholderAsset = 'assets/sounds/silent_placeholder.wav';
+
 /// Bridges our data model to the `alarm` package, which does the hard native
 /// work: firing at an exact time even when the app is killed, playing audio in a
 /// foreground service, showing a full-screen notification, and surviving reboots.
@@ -64,15 +72,10 @@ class AlarmScheduler {
         // — fall back to any song so the alarm still rings with something.
         return (allSongs.toList()..shuffle()).first.asset;
       case model.SoundMode.pool:
-        final pool = _findPool(a.poolId, pools);
-        if (pool != null && pool.songs.isNotEmpty) {
-          final chosen = pool.order == PoolOrder.shuffle
-              ? (pool.songs.toList()..shuffle()).first
-              : pool.songs.first;
-          return songByName(allSongs, chosen.name)?.asset ??
-              kSongCatalog.first.asset;
-        }
-        return kSongCatalog.first.asset;
+        // Dart owns real playback for this mode (see class doc above) — the
+        // native side just needs *some* active audio to satisfy the
+        // foreground service, so it plays true silence.
+        return kSilentPlaceholderAsset;
     }
   }
 

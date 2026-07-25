@@ -13,9 +13,12 @@ import '../widgets/app_widgets.dart';
 class RingingScreen extends StatefulWidget {
   final Alarm alarm;
 
-  /// When true (the in-app TEST) this screen plays/stops the tone itself. When
-  /// false (a real fired alarm) the `alarm` package is already playing audio, so
-  /// we don't; [onStop] is called on dismiss to stop it and reschedule/disable.
+  /// When true, this screen plays/stops the tone itself via [AudioService] —
+  /// needed for "Pools" mode (the native alarm engine can only loop one fixed
+  /// file, so Dart drives the real sequenced playback once this screen mounts;
+  /// see AlarmScheduler.kSilentPlaceholderAsset). When false, the `alarm`
+  /// package's native side is already playing the (single-tone) audio, so we
+  /// don't; [onStop] is called on dismiss to stop it and reschedule/disable.
   final bool playInApp;
   final Future<void> Function()? onStop;
 
@@ -41,8 +44,8 @@ class _RingingScreenState extends State<RingingScreen>
   @override
   void initState() {
     super.initState();
-    // For the in-app TEST we start the tone here; for a real alarm the native
-    // `alarm` package is already playing it.
+    // See widget.playInApp's doc: true for "Pools" mode (we drive the real
+    // sequenced playback); false elsewhere (native side already playing it).
     if (widget.playInApp) {
       final app = context.read<AppState>();
       _audio.playForAlarm(widget.alarm, app.pools, app.allSongs);

@@ -113,19 +113,25 @@ class _FirstNodeAppState extends State<FirstNodeApp> {
     }
 
     final queue = PuzzleEngine().resolveQueue(alarm);
+    // The native alarm engine can only loop one fixed audio file — it has no
+    // way to cycle through a pool's songs. For "Pools" mode it plays true
+    // silence natively (see AlarmScheduler.kSilentPlaceholderAsset) and Dart
+    // drives the actual sequenced playback here instead; every other mode
+    // keeps relying on the native side's already-playing loop.
+    final needsDartPlayback = alarm.soundMode == model.SoundMode.pool;
     await nav.push(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (_) => queue.isEmpty
             ? RingingScreen(
                 alarm: alarm,
-                playInApp: false,
+                playInApp: needsDartPlayback,
                 onStop: () => _dismissReal(alarm),
               )
             : PuzzleSolveScreen(
                 alarm: alarm,
                 queue: queue,
-                playInApp: false,
+                playInApp: needsDartPlayback,
                 blockBack: true,
                 onStop: () => _dismissReal(alarm),
               ),

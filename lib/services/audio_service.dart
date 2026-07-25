@@ -7,25 +7,44 @@ import '../models/alarm.dart';
 import '../models/pool.dart';
 import '../models/song.dart';
 
-/// Plays alarm tones (TEST / real ring flow) and short song previews (song
-/// picker list, Edit Alarm's trim preview).
+/// Plays alarm tones for the real ring flow (including true sequential
+/// pool playback — see [playPool]) and short song previews (song picker
+/// list, Edit Alarm's trim preview).
 ///
 /// One shared [AudioPlayer] is used so we never play two things at once —
-/// starting anything (ring or preview) stops whatever was playing before.
+/// starting anything (ring, pool sequence, or preview) stops whatever was
+/// playing before.
 class AudioService {
   final AudioPlayer _player = AudioPlayer();
   StreamSubscription<Duration>? _trimSub;
 
   /// The name of the song currently loaded for preview (list/trim preview),
-  /// or null if nothing is. Not used for the looping alarm ring/TEST flow.
+  /// or null if nothing is. Not used for the alarm ring flow.
   final ValueNotifier<String?> previewingName = ValueNotifier(null);
 
   /// Whether the current preview is actively playing (vs. paused/stopped).
   final ValueNotifier<bool> previewPlaying = ValueNotifier(false);
 
+  // ---------------------------------------------------- Pool sequencing ---
+  StreamSubscription<Duration>? _poolPosSub;
+  Timer? _poolFadeTimer;
+  Stopwatch? _fadeStopwatch;
+  int? _fadeDurationSec;
+  List<PoolSong> _poolQueue = [];
+  int _poolIndex = 0;
+  List<Song> _poolCatalog = [];
+  int _poolBaseVolume = 100;
+  bool _poolActive = false;
+
   AudioService() {
     _player.onPlayerComplete.listen((_) {
       previewPlaying.value = false;
+      // A pool track's own audio can be shorter than its configured trim end
+      // (e.g. left at the default 60s over a 15s tone) — without this, the
+      // player would just stop naturally and playback would silently get
+      // stuck, since the position-based check below would never see it reach
+      // `track.end`.
+      if (_poolActive) _advancePoolTrack();
     });
   }
 
@@ -45,6 +64,7 @@ class AudioService {
   }
 
   Future<void> _play(Song song, int volumePercent) async {
+    _cancelPoolTimers();
     _trimSub?.cancel();
     await _player.stop();
     // Loop so the tone keeps ringing until dismissed.
@@ -93,17 +113,100 @@ class AudioService {
       case SoundMode.pool:
         final pool = _findPool(alarm.poolId, pools);
         if (pool != null && pool.songs.isNotEmpty) {
-          final chosen = pool.order == PoolOrder.shuffle
-              ? (pool.songs.toList()..shuffle()).first
-              : pool.songs.first;
-          await playSongByName(allSongs, chosen.name, volume: alarm.volume);
+          await playPool(pool, allSongs, alarm);
         } else {
           await playSongByName(allSongs, null, volume: alarm.volume);
         }
     }
   }
 
-  Future<void> stop() => _player.stop();
+  // ------------------------------------------------------ Pool sequence ---
+
+  /// Plays a pool as a true sequence: each song plays its own trimmed
+  /// start/end range at its own relative volume (combined with the alarm's
+  /// overall volume), automatically advancing to the next song and looping
+  /// back to the first once the list is exhausted — continues until [stop]
+  /// is called. Linear order plays the list in order; shuffle shuffles once
+  /// at the start of ringing and loops that order. If gradual volume is
+  /// enabled, the combined volume ramps in linearly over its configured
+  /// duration, continuing seamlessly across song changes.
+  Future<void> playPool(Pool pool, List<Song> allSongs, Alarm alarm) async {
+    _cancelPoolTimers();
+    _trimSub?.cancel();
+    if (pool.songs.isEmpty) {
+      await _play(kSongCatalog.first, alarm.volume);
+      return;
+    }
+    _poolActive = true;
+    _poolCatalog = allSongs;
+    _poolBaseVolume = alarm.volume;
+    _poolQueue = pool.order == PoolOrder.shuffle
+        ? (pool.songs.toList()..shuffle())
+        : List.of(pool.songs);
+    _poolIndex = 0;
+    if (alarm.gradual.enabled && alarm.gradual.duration > 0) {
+      _fadeStopwatch = Stopwatch()..start();
+      _fadeDurationSec = alarm.gradual.duration;
+      _poolFadeTimer = Timer.periodic(
+        const Duration(milliseconds: 200),
+        (_) => _applyPoolVolume(),
+      );
+    }
+    await _playPoolTrack();
+  }
+
+  Future<void> _playPoolTrack() async {
+    _poolPosSub?.cancel();
+    final track = _poolQueue[_poolIndex];
+    final song = songByName(_poolCatalog, track.name) ?? kSongCatalog.first;
+    await _player.stop();
+    await _player.setReleaseMode(ReleaseMode.stop); // we drive advancing/looping ourselves
+    final combinedPercent = (_poolBaseVolume * track.volume / 100).round();
+    await _playSource(song, combinedPercent);
+    if (track.start > 0) {
+      await _player.seek(Duration(seconds: track.start));
+    }
+    if (_fadeDurationSec != null) await _applyPoolVolume();
+    _poolPosSub = _player.onPositionChanged.listen((pos) {
+      if (pos.inSeconds >= track.end) _advancePoolTrack();
+    });
+  }
+
+  void _advancePoolTrack() {
+    _poolPosSub?.cancel();
+    _poolIndex = (_poolIndex + 1) % _poolQueue.length;
+    _playPoolTrack();
+  }
+
+  Future<void> _applyPoolVolume() async {
+    if (_poolQueue.isEmpty) return;
+    final track = _poolQueue[_poolIndex];
+    var fraction = (_poolBaseVolume * track.volume / 100) / 100;
+    if (_fadeDurationSec != null && _fadeStopwatch != null) {
+      final elapsed = _fadeStopwatch!.elapsedMilliseconds / 1000.0;
+      final t = (elapsed / _fadeDurationSec!).clamp(0.0, 1.0);
+      fraction *= t;
+      if (t >= 1.0) {
+        _fadeDurationSec = null;
+        _fadeStopwatch = null;
+        _poolFadeTimer?.cancel();
+      }
+    }
+    await _player.setVolume(fraction.clamp(0.0, 1.0));
+  }
+
+  void _cancelPoolTimers() {
+    _poolActive = false;
+    _poolPosSub?.cancel();
+    _poolFadeTimer?.cancel();
+    _fadeStopwatch = null;
+    _fadeDurationSec = null;
+  }
+
+  Future<void> stop() async {
+    _cancelPoolTimers();
+    await _player.stop();
+  }
 
   // ------------------------------------------------------------- Preview ---
 
@@ -119,6 +222,7 @@ class AudioService {
     int? endSec,
     int volume = 100,
   }) async {
+    _cancelPoolTimers();
     _trimSub?.cancel();
     final song = songByName(allSongs, name) ?? kSongCatalog.first;
     await _player.stop();
@@ -158,6 +262,7 @@ class AudioService {
   }
 
   void dispose() {
+    _cancelPoolTimers();
     _trimSub?.cancel();
     previewingName.dispose();
     previewPlaying.dispose();

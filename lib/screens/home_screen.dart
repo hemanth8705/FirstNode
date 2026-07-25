@@ -7,7 +7,6 @@ import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/alarm_card.dart';
 import 'edit_alarm_screen.dart';
-import 'ring_flow.dart';
 
 /// The Home screen: the list of alarms with an add button.
 class HomeScreen extends StatelessWidget {
@@ -102,7 +101,6 @@ class HomeScreen extends StatelessWidget {
                           soundSummary: app.soundSummary(a),
                           onOpen: () => _openEdit(context, a),
                           onToggle: () => app.toggleAlarm(a.id),
-                          onTest: () => startRing(context, a),
                         );
                       },
                     ),

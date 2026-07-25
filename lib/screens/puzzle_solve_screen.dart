@@ -11,8 +11,8 @@ import '../widgets/app_widgets.dart';
 /// Shown when a ringing alarm has puzzles: the user must solve each queued
 /// challenge in turn to dismiss it. Audio plays until the last puzzle is solved.
 ///
-/// During TEST we allow the system back button to bail out. For a *real* fired
-/// alarm we'll set `canPop: false` so it can't be dismissed without solving.
+/// For a real fired alarm, [blockBack] is set so the system back button can't
+/// dismiss it without solving.
 class PuzzleSolveScreen extends StatefulWidget {
   final Alarm alarm;
   final List<PuzzleStep> queue;

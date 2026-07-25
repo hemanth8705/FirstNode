@@ -23,8 +23,13 @@ void main() {
   _write('assets/sounds/soft_pulse.wav', 12, _softPulse);
   _write('assets/sounds/radar.wav', 10, _radar);
   _write('assets/sounds/sunrise.wav', 15, _sunrise);
+  // True silence — used as the *native* placeholder for "Pools" mode alarms,
+  // where Dart drives the actual audible sequencing (see AudioService.playPool
+  // and AlarmScheduler's use of kSilentPlaceholderAsset). Never shown in the
+  // user-facing song catalog.
+  _write('assets/sounds/silent_placeholder.wav', 5, (t) => 0);
 
-  stdout.writeln('Done — 6 tones written to assets/sounds/');
+  stdout.writeln('Done — 7 tones written to assets/sounds/');
 }
 
 /// A short attack/release envelope so notes don't click on/off.

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../models/alarm.dart';
@@ -7,20 +6,18 @@ import '../theme/app_theme.dart';
 import 'app_widgets.dart';
 
 /// A single alarm row on the Home screen: time + label/repeat + sound summary
-/// on the left, a TEST button and on/off toggle on the right.
+/// on the left, the on/off toggle on the right.
 class AlarmCard extends StatelessWidget {
   final Alarm alarm;
   final String soundSummary;
   final VoidCallback onOpen;
   final VoidCallback onToggle;
-  final VoidCallback onTest;
 
   const AlarmCard({
     required this.alarm,
     required this.soundSummary,
     required this.onOpen,
     required this.onToggle,
-    required this.onTest,
     super.key,
   });
 
@@ -71,29 +68,6 @@ class AlarmCard extends StatelessWidget {
               ),
             ),
           ),
-          // Dev-only preview button — compiled out of release builds so end
-          // users never see it, per the "remove TEST before release" request.
-          if (kDebugMode) ...[
-            const SizedBox(width: 10),
-            GestureDetector(
-              onTap: onTest,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(100),
-                  border: Border.all(color: AppColors.w(0.18)),
-                ),
-                child: Text(
-                  'TEST',
-                  style: TextStyle(
-                    fontSize: 11,
-                    letterSpacing: 0.3,
-                    color: AppColors.w(0.6),
-                  ),
-                ),
-              ),
-            ),
-          ],
           const SizedBox(width: 10),
           AppToggle(value: alarm.enabled, onTap: onToggle),
         ],

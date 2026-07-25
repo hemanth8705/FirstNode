@@ -615,4 +615,79 @@ explanatory text distinguishing it from Random.
 - `flutter test` → passes.
 - `flutter build apk --debug` → succeeds.
 
+### 2026-07-25 — Fix: Pools mode didn't cycle through songs; removed TEST button
+
+User report: with a "Weekday Mix" pool (Linear order, 2 songs) selected, only
+the first song ever played — it just looped forever instead of moving to the
+second song after its trimmed length and cycling back to the first.
+
+#### Root cause
+Pool mode was never actually implemented as a sequence. Both `AlarmScheduler`
+(real alarms) and `AudioService` (in-app playback) treated "Pools" as "pick
+**one** representative song from the pool" — the first song for Linear order,
+or one random pick for Shuffle — then handed that single song to the audio
+layer to loop **forever**. This was a known, documented simplification from
+Milestone 2 ("Pools/trim at ring time: a fired alarm plays a single tone... the
+pool/trim UI is saved but full playback needs a custom player — future work") —
+today's report is exactly that future work coming due.
+
+#### Fix: true sequential/looping pool playback
+[lib/services/audio_service.dart](lib/services/audio_service.dart) gained
+`playPool(pool, allSongs, alarm)` — a real per-song sequencer:
+- Builds a queue from the pool's songs (list order for Linear; shuffled once
+  at the start of ringing for Shuffle — the order isn't reshuffled every loop,
+  keeping behavior predictable once ringing starts).
+- Plays each song from its own `start` to `end` (its individual trim), at its
+  own relative volume **combined with the alarm's overall volume**
+  (`alarm.volume% × song.volume% / 100`) — previously each pool song's own
+  volume slider was set in the UI but silently ignored during playback, since
+  only one song ever played; now that multiple genuinely play, honoring it is
+  part of making the feature work as designed, not a scope add.
+- Advances to the next song via `AudioPlayer.onPositionChanged` once it
+  crosses `end`, and **also** on `onPlayerComplete` (the song's own file
+  finishing naturally) — needed because a song's own audio can be shorter than
+  its configured trim `end` (e.g. left at the default 60s over a 15s tone);
+  without the second check, playback would silently stall in silence once the
+  file ran out, since position would never reach the configured cutoff.
+- Wraps back to the first song once the queue is exhausted, continuing
+  indefinitely until `stop()` is called (dismissal).
+- Implements gradual volume itself (a linear ramp over `gradual.duration`,
+  matching how the native side already does it) so pool-mode alarms don't
+  silently lose that feature now that Dart owns their audible playback (see
+  below) — the ramp continues seamlessly across song changes.
+
+#### Real fired alarms needed a deeper change, not just TEST/in-app
+The native `alarm` package can only loop one fixed audio file — no concept of
+"play A, then B, then loop." For real (backgrounded/killed-app) alarms it's
+literally impossible to sequence natively, so:
+- [lib/services/alarm_scheduler.dart](lib/services/alarm_scheduler.dart): Pools
+  mode now schedules the native alarm with a **true-silence placeholder**
+  (`assets/sounds/silent_placeholder.wav`, added to
+  [tool/generate_tones.dart](tool/generate_tones.dart)) instead of a real song —
+  the native side still fires, wakes the screen, vibrates, and shows the
+  notification (all unaffected), it just doesn't play anything audible itself.
+- [lib/main.dart](lib/main.dart)'s `_onRing` now sets `playInApp: true`
+  specifically when `alarm.soundMode == SoundMode.pool` (every other mode
+  keeps relying on the native side's own loop, unchanged) — so **Dart's**
+  `AudioService.playPool()` takes over actual audible playback the moment the
+  ring/puzzle screen mounts, for both TEST-style and real alarm firing alike.
+- Trade-off worth knowing: there's a brief (well under a second, given
+  `androidFullScreenIntent` launches the screen immediately) silent gap between
+  the native alarm firing and Dart's screen mounting to take over — acceptable
+  for correct sequencing over the previous "loops forever, never advances" bug.
+
+#### TEST button removed (for real this time)
+Previously gated behind `kDebugMode` (hidden in release, visible in debug) per
+an earlier ask — user asked again to just remove it outright, so it's now gone
+unconditionally: [lib/widgets/alarm_card.dart](lib/widgets/alarm_card.dart) (no
+more button/`onTest`), [lib/screens/home_screen.dart](lib/screens/home_screen.dart)
+(wiring removed), and `lib/screens/ring_flow.dart` deleted entirely (it was
+`startRing`'s only caller). To exercise ring/puzzle flows now, use a real
+scheduled alarm.
+
+#### Verified
+- `flutter analyze` → **No issues found.**
+- `flutter test` → passes.
+- `flutter build apk --debug` → succeeds.
+
 _(further entries appended below as each piece is built)_
