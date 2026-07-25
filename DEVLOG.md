@@ -500,4 +500,38 @@ whether it's going through this same receiver or something else entirely.
 - `flutter analyze` → **No issues found.**
 - `flutter build apk --debug` → succeeds with the new receiver + manifest override.
 
+### 2026-07-25 — Fix: text overflow with long imported song names
+
+User screenshot showed a red-and-black striped banner reading "RIGHT OVERFLOWED
+BY 220 PIXELS" on the Edit Alarm screen after importing a real audio file with a
+long name ("Karpur Gauram Karunavataram..."). That banner is Flutter's built-in
+debug-mode layout warning (`RenderFlex overflowed`) — not a network/AI error.
+
+**Why it only showed up now:** every bundled tone name is short ("Radar",
+"Sunrise", ≤11 characters), so no row displaying a song name had ever been
+tested against a long string. Imported files can have arbitrarily long names,
+and several rows put a `Text` directly inside a `Row` (or an unbounded inner
+`Row`) with no `Expanded` wrapper and no `overflow`/`maxLines` — Flutter renders
+such a `Text` at its full natural width, which overflows the row once the name
+is longer than the remaining space.
+
+Fixed by wrapping every place a song/pool name is shown in `Expanded` and adding
+`maxLines: 1` + `overflow: TextOverflow.ellipsis` (truncates with "…" instead of
+overflowing or wrapping):
+- [lib/screens/edit_alarm_screen.dart](lib/screens/edit_alarm_screen.dart)'s
+  `_rowWithChevron` — the exact row from the screenshot (specific-song and
+  pool-name display).
+- [lib/screens/song_picker_screen.dart](lib/screens/song_picker_screen.dart)'s
+  `_songRow` — same bug class (nested unbounded Row/Column).
+- [lib/screens/pool_editor_screen.dart](lib/screens/pool_editor_screen.dart) and
+  [lib/screens/pool_picker_screen.dart](lib/screens/pool_picker_screen.dart) —
+  already had `Expanded` (no crash), added ellipsis for consistency so a long
+  name doesn't instead wrap awkwardly across multiple lines.
+- [lib/widgets/alarm_card.dart](lib/widgets/alarm_card.dart) — same consistency
+  fix for the label/sound-summary lines on the Home screen.
+
+#### Verified
+- `flutter analyze` → **No issues found.**
+- `flutter test` → passes.
+
 _(further entries appended below as each piece is built)_

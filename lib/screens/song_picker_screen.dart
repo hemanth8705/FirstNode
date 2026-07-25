@@ -149,38 +149,45 @@ class SongPickerScreen extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceAlt2,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    s.imported ? Icons.folder_outlined : Icons.music_note,
-                    size: 16,
-                    color: AppColors.w(0.25),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.name,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
+            Expanded(
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceAlt2,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    Text(
-                      fmtMMSS(s.duration),
-                      style: TextStyle(color: AppColors.w(0.4), fontSize: 12),
+                    child: Icon(
+                      s.imported ? Icons.folder_outlined : Icons.music_note,
+                      size: 16,
+                      color: AppColors.w(0.25),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          s.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                        ),
+                        Text(
+                          fmtMMSS(s.duration),
+                          style: TextStyle(color: AppColors.w(0.4), fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(width: 8),
             Text(
               selected ? '●' : '',
               style: const TextStyle(color: Colors.white, fontSize: 13),

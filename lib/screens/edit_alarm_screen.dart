@@ -377,7 +377,15 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(text, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+          ),
+        ),
+        const SizedBox(width: 8),
         Icon(Icons.chevron_right, size: 18, color: AppColors.w(0.4)),
       ],
     );

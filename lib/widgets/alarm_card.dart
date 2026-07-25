@@ -56,11 +56,15 @@ class AlarmCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     '${alarm.label.isEmpty ? 'Alarm' : alarm.label} · ${repeatSummary(alarm.days)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 13, color: AppColors.w(0.5)),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     soundSummary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 12, color: AppColors.w(0.32)),
                   ),
                 ],
