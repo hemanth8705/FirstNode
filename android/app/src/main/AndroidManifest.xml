@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Alarm scheduling, background audio, and full-screen ring (alarm package) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
@@ -48,6 +49,23 @@
         <service
             android:name="com.gdelataillade.alarm.services.NotificationOnKillService"
             android:exported="false" />
+
+        <!-- Disable the alarm package's own boot receiver: it blindly replays each
+             stored alarm's last-known one-shot time, which fires almost immediately
+             if that time has already passed since (e.g. phone was off through it) —
+             see SafeBootRescheduleReceiver for the full explanation and the fix. -->
+        <receiver
+            android:name="com.gdelataillade.alarm.alarm.BootReceiver"
+            tools:node="remove" />
+
+        <receiver
+            android:name=".SafeBootRescheduleReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -406,4 +406,98 @@ New dependencies: `file_picker` (system file picker) and `path_provider`
 - `flutter test` → passes.
 - `flutter build apk --debug` → succeeds with the new native plugins.
 
+### 2026-07-25 — Bug investigation: alarms ringing on boot / USB connect
+
+User report: a "Random Pool" alarm sometimes played its sound when the phone
+booted up or was connected via USB, instead of only at the scheduled time.
+
+#### Root cause (confirmed by reading the `alarm` package's own source)
+We only ever schedule the **next single occurrence** of each alarm (a one-shot
+`dateTime`); "repeat on Mon/Wed/Fri" is entirely our own Dart-side concept —
+the native plugin has no notion of it. That's fine normally, because after each
+ring we reschedule the next occurrence ourselves
+([lib/main.dart](lib/main.dart)'s `_dismissReal`).
+
+The bug is in what happens **without our Dart code involved at all**. The
+`alarm` package's own native `BootReceiver` (bundled inside the plugin, source
+at `alarm-5.5.0/android/.../alarm/BootReceiver.kt`) runs on `BOOT_COMPLETED`
+independently of our Flutter engine — it doesn't wait for the app to open. It
+reads its own natively-persisted alarm list (`AlarmStorage`, a separate store
+from our `shared_preferences` data) and replays each alarm's **last-known**
+`dateTime` verbatim via `AlarmApiImpl.setAlarm()`. That method contains:
+
+```kotlin
+val delayInSeconds = (alarm.dateTime.time - System.currentTimeMillis()) / 1000
+if (delayInSeconds <= 5) {
+    handleImmediateAlarm(alarmIntent, delayInSeconds.toInt())  // fires almost instantly
+} else {
+    handleDelayedAlarm(...)  // properly scheduled via AlarmManager
+}
+```
+
+If the stored `dateTime` is already in the past — which is very likely after any
+reboot that happens *after* the alarm's last-scheduled time (e.g. a 6:30am alarm
+and the phone reboots that afternoon) — `delayInSeconds` is negative, hits the
+"immediate" branch, and the alarm rings right away, playing whatever tone was
+picked (for Random/Pool-shuffle, whatever was last randomly chosen) — **not** a
+fresh selection, just a stale replay.
+
+I checked: this isn't fixed in a newer package version (5.5.0 is current) and
+isn't a known/tracked GitHub issue — it's a genuine gap in the plugin's
+boot-recovery logic. It's most likely to surface during heavy dev/test cycles
+(exactly what we've been doing this session — leaving test alarms armed while
+repeatedly rebooting/reinstalling the same phone), but it's a real risk for any
+end user too.
+
+I could not find equally hard evidence for the **USB-connect** trigger — the
+plugin's manifest only registers for `BOOT_COMPLETED`, not any
+reinstall/package-replaced or USB-related action, so it isn't the exact same
+code path. It's plausible it's an adjacent effect (e.g. Android's Doze-exemption
+behavior while a debugger is attached surfacing a previously-stuck stale alarm),
+but I'm flagging that part as a reasonable hypothesis rather than a proven cause.
+The fix below removes the *entire class* of "replay a stale one-shot time"
+behavior regardless of what triggers it, which should cover this too — worth
+confirming next time it happens (see "how to verify" below).
+
+#### Fix
+- [android/app/src/main/AndroidManifest.xml](android/app/src/main/AndroidManifest.xml):
+  disabled the plugin's own `BootReceiver` via the standard Android manifest-merger
+  override (`tools:node="remove"` on a matching `<receiver>` declaration), and
+  registered our own receiver for `BOOT_COMPLETED` instead.
+- [android/app/src/main/kotlin/.../SafeBootRescheduleReceiver.kt](android/app/src/main/kotlin/com/firstnode/firstnode/SafeBootRescheduleReceiver.kt) —
+  new receiver, reusing the plugin's own public `AlarmStorage`/`AlarmApiImpl`
+  classes (no fork needed): for each stored alarm, **re-arm it only if its
+  `dateTime` is still in the future**; otherwise skip it silently. A skipped
+  alarm isn't lost — our own `AppState.ready` → `AlarmScheduler.syncAll()` (which
+  *does* know the real repeat-day rule) correctly reschedules it the next time the
+  app is opened. Trade-off, stated plainly: an alarm whose time was missed while
+  the phone was off won't ring retroactively until the app is reopened — the same
+  category of trade-off most software alarms make, and vastly preferable to
+  ringing at the wrong moment.
+
+#### On requirement #3 ("random selection works reliably every time the alarm fires")
+Worth understanding precisely: the `alarm` package bakes a fixed `assetAudioPath`
+into the native alarm at the moment we call `Alarm.set()` — there's no hook for
+"pick the file at the exact instant it rings." So the random/shuffle pick is
+decided at the **last (re)schedule time** (right after the previous ring's
+dismissal, or whenever `syncAll()` runs), not at the literal ring moment. In
+practice this still means a different song each time it actually rings — it just
+means the pick can also silently re-roll if `syncAll()` runs for an unrelated
+reason (e.g. editing a *different* alarm triggers a global re-sync). This is a
+minor, invisible-in-the-UI characteristic of the current design, not a source of
+unexpected playback — that was exclusively the boot-replay bug above. Flagging it
+here for transparency; happy to build a stricter "only reschedule alarms that
+actually changed" pass if it matters, but it isn't needed to satisfy the reported
+bug.
+
+#### How to verify / what to watch for next time
+Logcat filtered on `SafeBootReschedule` will now show exactly which alarms were
+re-armed vs. skipped after any reboot. If the USB-connect scenario happens again,
+capturing logcat at that moment (`adb logcat | grep -i alarm`) would confirm
+whether it's going through this same receiver or something else entirely.
+
+#### Verified
+- `flutter analyze` → **No issues found.**
+- `flutter build apk --debug` → succeeds with the new receiver + manifest override.
+
 _(further entries appended below as each piece is built)_
