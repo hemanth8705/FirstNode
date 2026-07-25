@@ -690,4 +690,74 @@ scheduled alarm.
 - `flutter test` → passes.
 - `flutter build apk --debug` → succeeds.
 
+### 2026-07-25 — Fix: alarm/Dismiss not responsive while phone is locked
+
+User report: with the phone idle/locked, an alarm set for e.g. 5:00 wouldn't
+actually start ringing until the phone was unlocked (e.g. at 5:02) — and when
+it did ring, tapping Dismiss had no effect until unlock either. Both symptoms
+went away the instant the phone was unlocked, in either direction (ring
+"catching up", Dismiss suddenly working).
+
+#### Root cause
+[android/app/src/main/kotlin/.../MainActivity.kt](android/app/src/main/kotlin/com/firstnode/firstnode/MainActivity.kt)
+was the bare Flutter template default — it never told Android that this
+Activity should be **interactive over the lock screen**. The `alarm` package's
+own install docs note that versions before 5.0.0 configured this
+automatically, but it no longer does (we depend on 5.5.0) — meaning the *app*
+is responsible for it now, and nothing ever added it.
+
+Without it, the sequence that actually happened: the native alarm fires
+exactly on time (that part is real `AlarmManager`, unaffected) and its
+full-screen-intent notification *launches* our Activity over the lock screen —
+but without opting in via `showWhenLocked`/`turnScreenOn`, Android treats it as
+a normal activity that shouldn't be fully interactive while genuinely locked.
+It sits in an ambiguous "visible but not truly resumed" state: our Dart code
+(and therefore `AudioService.playPool()` actually starting sound, and the
+Dismiss button's tap handler) doesn't get a chance to properly run until the
+user's own unlock gesture forces Android to fully resume the activity stack —
+which is exactly "everything catches up the moment I unlock."
+
+This is the textbook three-part recipe for a reliable full-screen alarm/call
+UI on Android — `USE_FULL_SCREEN_INTENT` permission + a notification with
+`fullScreenIntent` (both already in place via the `alarm` package) + the
+**target Activity opting into show-over-lock-screen** (the missing piece).
+
+#### Fix
+`MainActivity.onCreate()` now calls `setShowWhenLocked(true)` +
+`setTurnScreenOn(true)` (the modern Activity API, Android 8.1/API 27+), with a
+fallback to the older `WindowManager.LayoutParams` flags for API 23-26 (our
+`minSdk`). This makes the alarm/puzzle screen fully visible, awake, *and*
+properly touch-interactive straight from the lock screen — without fully
+unlocking the device — exactly like the stock Clock/Phone apps.
+
+Deliberately left out: `FLAG_KEEP_SCREEN_ON`. It's set at the Activity level
+for its whole lifetime, and since this Activity is also the normal one used for
+browsing the alarm list, an unconditional keep-awake would drain battery during
+regular use too — out of scope for what was reported. If the screen turning off
+mid-puzzle becomes its own issue, that calls for a narrower fix (e.g. toggling
+it only while the ring/puzzle screen is shown).
+
+#### A second factor worth ruling out on this device
+This phone is a Xiaomi/POCO device (confirmed earlier this session via `adb
+shell getprop ro.product.manufacturer`). MIUI/HyperOS is well known for extra,
+OS-level background/battery restrictions on top of stock Android's — even with
+the code fix above, if any of these aren't granted for FirstNode, similar
+symptoms could still show up:
+- **Settings → Apps → FirstNode → Battery saver → No restrictions**
+- **Settings → Apps → FirstNode → Autostart → enabled**
+- **Settings → Apps → FirstNode → Other permissions → "Display pop-up windows
+  while running in the background" and "Show on Lock screen"** (exact wording
+  varies by MIUI/HyperOS version)
+
+These are device settings, not something fixable in code — worth checking if
+either symptom persists after this update.
+
+#### Verified
+- `flutter analyze` → **No issues found** (Dart-only; doesn't check Kotlin).
+- `flutter build apk --debug` → succeeds, confirming the native Kotlin change
+  compiles correctly.
+- **Not yet verified on-device** — this fix specifically needs testing with the
+  phone genuinely locked (screen off, not just backgrounded) through an actual
+  alarm firing, since that's precisely the state the bug only showed up in.
+
 _(further entries appended below as each piece is built)_
