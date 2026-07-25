@@ -4,12 +4,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/alarm.dart';
 import '../models/pool.dart';
+import '../models/song.dart';
 
 /// The full set of persisted data, loaded together.
 class AppData {
   final List<Alarm> alarms;
   final List<Pool> pools;
-  AppData(this.alarms, this.pools);
+  final List<Song> customSongs;
+  AppData(this.alarms, this.pools, this.customSongs);
 }
 
 /// Saves and loads the app's data as a single JSON string in
@@ -31,14 +33,23 @@ class Storage {
     final pools = (map['pools'] as List)
         .map((e) => Pool.fromJson(Map<String, dynamic>.from(e)))
         .toList();
-    return AppData(alarms, pools);
+    // Older saves predate imported songs, so this key may be missing.
+    final customSongs = ((map['customSongs'] as List?) ?? [])
+        .map((e) => Song.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+    return AppData(alarms, pools, customSongs);
   }
 
-  Future<void> save(List<Alarm> alarms, List<Pool> pools) async {
+  Future<void> save(
+    List<Alarm> alarms,
+    List<Pool> pools,
+    List<Song> customSongs,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = jsonEncode({
       'alarms': alarms.map((a) => a.toJson()).toList(),
       'pools': pools.map((p) => p.toJson()).toList(),
+      'customSongs': customSongs.map((s) => s.toJson()).toList(),
     });
     await prefs.setString(_key, raw);
   }

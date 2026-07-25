@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/alarm.dart';
 import '../models/pool.dart';
 import '../models/puzzle.dart';
+import '../models/song.dart';
 import '../services/storage.dart';
 
 /// The single source of truth for the app's data (all alarms + pools).
@@ -18,7 +19,12 @@ class AppState extends ChangeNotifier {
 
   List<Alarm> alarms = [];
   List<Pool> pools = [];
+  List<Song> customSongs = [];
   bool loaded = false;
+
+  /// Bundled tones + anything the user has imported — the full catalog every
+  /// song picker and playback path should search.
+  List<Song> get allSongs => [...kSongCatalog, ...customSongs];
 
   /// Completes when the first data load finishes. The alarm ring handler waits
   /// on this in case the app was cold-started by a firing alarm.
@@ -37,6 +43,7 @@ class AppState extends ChangeNotifier {
     } else {
       alarms = data.alarms;
       pools = data.pools;
+      customSongs = data.customSongs;
     }
     _sortAlarms();
     loaded = true;
@@ -47,7 +54,7 @@ class AppState extends ChangeNotifier {
   void _sortAlarms() =>
       alarms.sort((a, b) => a.minutesOfDay.compareTo(b.minutesOfDay));
 
-  Future<void> _persist() => _storage.save(alarms, pools);
+  Future<void> _persist() => _storage.save(alarms, pools, customSongs);
 
   // ---------------------------------------------------------------- Alarms ---
 
@@ -126,6 +133,29 @@ class AppState extends ChangeNotifier {
 
   Future<void> deletePool(String id) async {
     pools.removeWhere((p) => p.id == id);
+    await _persist();
+    notifyListeners();
+  }
+
+  // ----------------------------------------------------------------- Songs ---
+
+  /// Adds an imported tone, renaming it (Name, Name (2), …) if it collides
+  /// with an existing bundled or imported name.
+  Future<void> addCustomSong(Song song) async {
+    var name = song.name;
+    var n = 2;
+    while (allSongs.any((s) => s.name == name)) {
+      name = '${song.name} ($n)';
+      n++;
+    }
+    customSongs.add(
+      Song(
+        name: name,
+        duration: song.duration,
+        asset: song.asset,
+        imported: true,
+      ),
+    );
     await _persist();
     notifyListeners();
   }

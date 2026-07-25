@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../models/alarm.dart';
@@ -66,25 +67,29 @@ class AlarmCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: onTest,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(100),
-                border: Border.all(color: AppColors.w(0.18)),
-              ),
-              child: Text(
-                'TEST',
-                style: TextStyle(
-                  fontSize: 11,
-                  letterSpacing: 0.3,
-                  color: AppColors.w(0.6),
+          // Dev-only preview button — compiled out of release builds so end
+          // users never see it, per the "remove TEST before release" request.
+          if (kDebugMode) ...[
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: onTest,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(100),
+                  border: Border.all(color: AppColors.w(0.18)),
+                ),
+                child: Text(
+                  'TEST',
+                  style: TextStyle(
+                    fontSize: 11,
+                    letterSpacing: 0.3,
+                    color: AppColors.w(0.6),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
           const SizedBox(width: 10),
           AppToggle(value: alarm.enabled, onTap: onToggle),
         ],

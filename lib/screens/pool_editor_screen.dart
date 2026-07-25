@@ -53,7 +53,7 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
               PoolSong(
                 name: name,
                 start: 0,
-                end: songDuration(name),
+                end: songDuration(context.read<AppState>().allSongs, name),
                 volume: 80,
               ),
             );
@@ -168,7 +168,10 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
 
   Widget _songCard(int i, PoolSong s) {
     final expanded = _expandedIndex == i;
-    final max = songDuration(s.name).toDouble();
+    final max = songDuration(
+      context.read<AppState>().allSongs,
+      s.name,
+    ).toDouble();
     return AppCard(
       child: Column(
         children: [

@@ -44,7 +44,8 @@ class _RingingScreenState extends State<RingingScreen>
     // For the in-app TEST we start the tone here; for a real alarm the native
     // `alarm` package is already playing it.
     if (widget.playInApp) {
-      _audio.playForAlarm(widget.alarm, context.read<AppState>().pools);
+      final app = context.read<AppState>();
+      _audio.playForAlarm(widget.alarm, app.pools, app.allSongs);
     }
   }
 

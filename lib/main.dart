@@ -67,11 +67,13 @@ class _FirstNodeAppState extends State<FirstNodeApp> {
     widget.appState.onAlarmsChanged = () => widget.scheduler!.syncAll(
       widget.appState.alarms,
       widget.appState.pools,
+      widget.appState.allSongs,
     );
     await AlarmPermissions.ensure();
     await widget.scheduler!.syncAll(
       widget.appState.alarms,
       widget.appState.pools,
+      widget.appState.allSongs,
     );
   }
 
@@ -139,7 +141,11 @@ class _FirstNodeAppState extends State<FirstNodeApp> {
       await widget.appState.setEnabled(alarm.id, false);
     } else {
       // A repeating alarm schedules its next occurrence.
-      await widget.scheduler!.scheduleOne(alarm, widget.appState.pools);
+      await widget.scheduler!.scheduleOne(
+        alarm,
+        widget.appState.pools,
+        widget.appState.allSongs,
+      );
     }
   }
 

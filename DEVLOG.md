@@ -343,4 +343,67 @@ increments (ported directly from the original design) and should instead be
 - `flutter analyze` → **No issues found.**
 - `flutter test` → passes.
 
+### 2026-07-25 — Import personal audio files; hide TEST button in release
+
+User feedback while reviewing progress: (1) let users import their own audio
+files as alarm tones, and (2) the "TEST" button/tag shouldn't be visible in the
+shipped app.
+
+#### TEST button → debug-only
+- [lib/widgets/alarm_card.dart](lib/widgets/alarm_card.dart): wrapped the TEST
+  button in `if (kDebugMode)`. It's compiled out of release builds entirely
+  (satisfying "removed before release") while staying available for our own
+  testing during `flutter run` debug sessions.
+
+#### Import personal audio files
+New dependencies: `file_picker` (system file picker) and `path_provider`
+(app-private storage directory) — `flutter pub add file_picker path_provider`.
+
+- [lib/models/song.dart](lib/models/song.dart): `Song` gained an `imported`
+  flag and `toJson`/`fromJson`, since imported tones (unlike the fixed bundled
+  catalog) are user-specific and must be persisted. `songByName`/`songDuration`
+  now take an explicit `catalog` list instead of only searching the bundled
+  `kSongCatalog`, so callers can pass the combined bundled+imported list.
+- [lib/services/song_import.dart](lib/services/song_import.dart) — new service:
+  opens the system audio picker, **copies the chosen file into the app's own
+  private storage** (`path_provider`'s application-support directory, under
+  `imported_sounds/`), then probes its duration by loading it into a throwaway
+  `audioplayers` `AudioPlayer` (`setSourceDeviceFile` + `getDuration()` — no
+  extra package needed, and it doesn't audibly play anything).
+  - **Why copy the file instead of using the picked path directly?** The file
+    picker's result may point to a cache location or a content:// URI-backed
+    path without a durable permission grant. A real alarm can fire hours or
+    days later, possibly after the phone reboots — the tone must still be
+    readable then. Copying into our own app-private directory guarantees that,
+    and app-private storage needs no runtime storage permission on any Android
+    version.
+- [lib/state/app_state.dart](lib/state/app_state.dart): added `customSongs`,
+  persisted via `Storage` (extended its JSON to include a `customSongs` key —
+  old saves without it default to an empty list), `allSongs` (bundled + custom,
+  the catalog every picker/player should use), and `addCustomSong()` (renames
+  on a name collision: "Song", "Song (2)", …).
+- [lib/screens/song_picker_screen.dart](lib/screens/song_picker_screen.dart):
+  added an "Import from device" row at the top of the list. Picking a file adds
+  it to `AppState` and — matching how choosing an existing song behaves —
+  either selects it immediately (specific-song mode) or adds it to the pool
+  being edited and stays open (pool-add mode). Imported rows show a folder icon
+  instead of the bundled music-note icon so users can tell them apart.
+- **Playback wiring** — confirmed via the `alarm` package's own docs that its
+  `assetAudioPath` field accepts *either* a Flutter asset key *or* an absolute
+  device file path, so real scheduled alarms already handle imported tones with
+  no extra native work; only the lookup catalog needed threading through
+  ([lib/services/alarm_scheduler.dart](lib/services/alarm_scheduler.dart)).
+  [lib/services/audio_service.dart](lib/services/audio_service.dart) (used by
+  TEST and by the in-app ring/puzzle screens) picks `AssetSource` vs
+  `DeviceFileSource` based on `Song.imported`.
+- Every call site that looked up a song by name (`edit_alarm_screen.dart`,
+  `pool_editor_screen.dart`, `main.dart`, `ringing_screen.dart`,
+  `puzzle_solve_screen.dart`) now passes `AppState.allSongs` through instead of
+  only searching the bundled catalog.
+
+#### Verified
+- `flutter analyze` → **No issues found.**
+- `flutter test` → passes.
+- `flutter build apk --debug` → succeeds with the new native plugins.
+
 _(further entries appended below as each piece is built)_

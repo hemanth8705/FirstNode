@@ -80,10 +80,11 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
       ),
     );
     if (result != null && mounted) {
+      final allSongs = context.read<AppState>().allSongs;
       setState(() {
         draft.songName = result;
         draft.start = 0;
-        draft.end = songDuration(result);
+        draft.end = songDuration(allSongs, result);
       });
     }
   }
@@ -383,7 +384,7 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
   }
 
   Widget _trimSliders() {
-    final max = songDuration(draft.songName);
+    final max = songDuration(context.read<AppState>().allSongs, draft.songName);
     return Column(
       children: [
         Row(

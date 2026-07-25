@@ -1,14 +1,36 @@
 /// A tone the alarm can play.
 ///
-/// For milestone 1 these are **bundled** tones that ship inside the app under
-/// `assets/sounds/`. Later, when we add device-library support, the same model
-/// can describe a song picked from the phone (with a different [asset] source).
+/// [imported] distinguishes the two sources: bundled tones ship inside the app
+/// under `assets/sounds/` and [asset] is a Flutter asset path; imported tones
+/// are files the user picked from their phone, copied into the app's own
+/// storage (see [lib/services/song_import.dart]) and [asset] is that absolute
+/// file path.
 class Song {
   final String name;
   final int duration; // length of the tone in seconds
-  final String asset; // bundled asset path, e.g. assets/sounds/radar.wav
+  final String asset;
+  final bool imported;
 
-  const Song({required this.name, required this.duration, required this.asset});
+  const Song({
+    required this.name,
+    required this.duration,
+    required this.asset,
+    this.imported = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'duration': duration,
+    'asset': asset,
+    'imported': imported,
+  };
+
+  factory Song.fromJson(Map<String, dynamic> j) => Song(
+    name: j['name'],
+    duration: j['duration'],
+    asset: j['asset'],
+    imported: j['imported'] ?? false,
+  );
 }
 
 /// The fixed catalog of bundled tones shipped with the app.
@@ -36,14 +58,17 @@ const List<Song> kSongCatalog = [
   Song(name: 'Sunrise', duration: 15, asset: 'assets/sounds/sunrise.wav'),
 ];
 
-/// Looks up a tone by name, or null if it isn't in the catalog.
-Song? songByName(String? name) {
+/// Looks up a tone by name within [catalog] (pass `AppState.allSongs` so both
+/// bundled and imported tones are searched), or null if not found.
+Song? songByName(List<Song> catalog, String? name) {
   if (name == null) return null;
-  for (final s in kSongCatalog) {
+  for (final s in catalog) {
     if (s.name == name) return s;
   }
   return null;
 }
 
-/// Duration (seconds) of a named tone; a safe default if it's unknown.
-int songDuration(String? name) => songByName(name)?.duration ?? 60;
+/// Duration (seconds) of a named tone within [catalog]; a safe default if
+/// it's unknown.
+int songDuration(List<Song> catalog, String? name) =>
+    songByName(catalog, name)?.duration ?? 60;

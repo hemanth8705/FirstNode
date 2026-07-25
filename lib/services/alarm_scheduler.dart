@@ -36,12 +36,16 @@ class AlarmScheduler {
     return base.add(const Duration(days: 1)); // safety fallback
   }
 
-  String _assetFor(model.Alarm a, List<Pool> pools) {
+  // Note: the `alarm` package's `assetAudioPath` accepts either a Flutter
+  // asset key or an absolute device file path, so bundled and imported tones
+  // (see models/song.dart) both just work by passing `song.asset` through.
+  String _assetFor(model.Alarm a, List<Pool> pools, List<Song> allSongs) {
     switch (a.soundMode) {
       case model.SoundMode.specific:
-        return songByName(a.songName)?.asset ?? kSongCatalog.first.asset;
+        return songByName(allSongs, a.songName)?.asset ??
+            kSongCatalog.first.asset;
       case model.SoundMode.random:
-        return (kSongCatalog.toList()..shuffle()).first.asset;
+        return (allSongs.toList()..shuffle()).first.asset;
       case model.SoundMode.pool:
         Pool? pool;
         for (final p in pools) {
@@ -54,7 +58,8 @@ class AlarmScheduler {
           final chosen = pool.order == PoolOrder.shuffle
               ? (pool.songs.toList()..shuffle()).first
               : pool.songs.first;
-          return songByName(chosen.name)?.asset ?? kSongCatalog.first.asset;
+          return songByName(allSongs, chosen.name)?.asset ??
+              kSongCatalog.first.asset;
         }
         return kSongCatalog.first.asset;
     }
@@ -73,12 +78,16 @@ class AlarmScheduler {
     return VolumeSettings.fixed(volume: vol);
   }
 
-  AlarmSettings _settingsFor(model.Alarm a, List<Pool> pools) {
+  AlarmSettings _settingsFor(
+    model.Alarm a,
+    List<Pool> pools,
+    List<Song> allSongs,
+  ) {
     final hasPuzzles = a.puzzles.isNotEmpty;
     return AlarmSettings(
       id: a.id,
       dateTime: nextOccurrence(a),
-      assetAudioPath: _assetFor(a, pools),
+      assetAudioPath: _assetFor(a, pools, allSongs),
       loopAudio: true,
       vibrate: true,
       androidFullScreenIntent: true,
@@ -97,13 +106,17 @@ class AlarmScheduler {
   }
 
   /// Schedule a single alarm (or cancel it if disabled).
-  Future<void> scheduleOne(model.Alarm a, List<Pool> pools) async {
+  Future<void> scheduleOne(
+    model.Alarm a,
+    List<Pool> pools,
+    List<Song> allSongs,
+  ) async {
     if (!a.enabled) {
       await cancel(a.id);
       return;
     }
     try {
-      await Alarm.set(alarmSettings: _settingsFor(a, pools));
+      await Alarm.set(alarmSettings: _settingsFor(a, pools, allSongs));
       _scheduledIds.add(a.id);
     } catch (e) {
       debugPrint('AlarmScheduler: failed to schedule ${a.id}: $e');
@@ -122,7 +135,11 @@ class AlarmScheduler {
   /// Reconcile all scheduled alarms with the current list: cancel ones that are
   /// now disabled or deleted, and (re)schedule every enabled one. Call after any
   /// change and at startup.
-  Future<void> syncAll(List<model.Alarm> alarms, List<Pool> pools) async {
+  Future<void> syncAll(
+    List<model.Alarm> alarms,
+    List<Pool> pools,
+    List<Song> allSongs,
+  ) async {
     final enabled = alarms.where((a) => a.enabled).toList();
     final enabledIds = enabled.map((a) => a.id).toSet();
 
@@ -130,7 +147,7 @@ class AlarmScheduler {
       if (!enabledIds.contains(id)) await cancel(id);
     }
     for (final a in enabled) {
-      await scheduleOne(a, pools);
+      await scheduleOne(a, pools, allSongs);
     }
   }
 }

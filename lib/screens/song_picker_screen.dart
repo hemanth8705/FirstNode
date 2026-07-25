@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/song.dart';
 import '../services/formatters.dart';
+import '../services/song_import.dart';
+import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_widgets.dart';
 
@@ -24,8 +27,43 @@ class SongPickerScreen extends StatelessWidget {
     super.key,
   });
 
+  Future<void> _import(BuildContext context) async {
+    try {
+      final song = await SongImportService().importFromDevice();
+      if (!context.mounted) return;
+      await context.read<AppState>().addCustomSong(song);
+      if (!context.mounted) return;
+
+      if (mode == SongPickerMode.specific) {
+        // Imported specifically to use it — select it immediately.
+        Navigator.of(context).pop(song.name);
+      } else {
+        onAdd?.call(song.name);
+        _toast(context, 'Added ${song.name}');
+      }
+    } on SongImportCancelled {
+      // User backed out of the picker — nothing to do.
+    } catch (e) {
+      if (context.mounted) _toast(context, "Couldn't import that file");
+    }
+  }
+
+  void _toast(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(milliseconds: 1200),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final songs = context.watch<AppState>().allSongs;
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -38,9 +76,10 @@ class SongPickerScreen extends StatelessWidget {
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                children: kSongCatalog
-                    .map((s) => _songRow(context, s))
-                    .toList(),
+                children: [
+                  _importRow(context),
+                  ...songs.map((s) => _songRow(context, s)),
+                ],
               ),
             ),
             if (mode == SongPickerMode.poolAdd)
@@ -57,6 +96,39 @@ class SongPickerScreen extends StatelessWidget {
     );
   }
 
+  Widget _importRow(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _import(context),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.w(0.06))),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.w(0.18)),
+              ),
+              child: Icon(Icons.add, size: 16, color: AppColors.w(0.7)),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Import from device',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _songRow(BuildContext context, Song s) {
     final selected = mode == SongPickerMode.specific && selectedName == s.name;
     return GestureDetector(
@@ -65,15 +137,7 @@ class SongPickerScreen extends StatelessWidget {
           Navigator.of(context).pop(s.name);
         } else {
           onAdd?.call(s.name);
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                content: Text('Added ${s.name}'),
-                duration: const Duration(milliseconds: 900),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+          _toast(context, 'Added ${s.name}');
         }
       },
       behavior: HitTestBehavior.opaque,
@@ -96,7 +160,7 @@ class SongPickerScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    Icons.music_note,
+                    s.imported ? Icons.folder_outlined : Icons.music_note,
                     size: 16,
                     color: AppColors.w(0.25),
                   ),

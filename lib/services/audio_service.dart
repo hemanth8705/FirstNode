@@ -11,32 +11,45 @@ import '../models/song.dart';
 class AudioService {
   final AudioPlayer _player = AudioPlayer();
 
-  Future<void> _playAsset(String asset, int volumePercent) async {
+  Future<void> _play(Song song, int volumePercent) async {
     await _player.stop();
     // Loop so the tone keeps ringing until dismissed.
     await _player.setReleaseMode(ReleaseMode.loop);
     await _player.setVolume((volumePercent / 100).clamp(0.0, 1.0));
-    // audioplayers' AssetSource is relative to the `assets/` folder, so we
-    // strip the leading "assets/" from the catalog path.
-    final rel = asset.startsWith('assets/')
-        ? asset.substring('assets/'.length)
-        : asset;
-    await _player.play(AssetSource(rel));
+    if (song.imported) {
+      // An absolute path to a file we copied into app storage on import.
+      await _player.play(DeviceFileSource(song.asset));
+    } else {
+      // audioplayers' AssetSource is relative to the `assets/` folder, so we
+      // strip the leading "assets/" from the bundled catalog path.
+      final rel = song.asset.startsWith('assets/')
+          ? song.asset.substring('assets/'.length)
+          : song.asset;
+      await _player.play(AssetSource(rel));
+    }
   }
 
-  Future<void> playSongByName(String? name, {int volume = 100}) async {
-    final song = songByName(name) ?? kSongCatalog.first;
-    await _playAsset(song.asset, volume);
+  Future<void> playSongByName(
+    List<Song> allSongs,
+    String? name, {
+    int volume = 100,
+  }) async {
+    final song = songByName(allSongs, name) ?? kSongCatalog.first;
+    await _play(song, volume);
   }
 
   /// Picks and plays the right tone for [alarm], honoring its sound mode.
-  Future<void> playForAlarm(Alarm alarm, List<Pool> pools) async {
+  Future<void> playForAlarm(
+    Alarm alarm,
+    List<Pool> pools,
+    List<Song> allSongs,
+  ) async {
     switch (alarm.soundMode) {
       case SoundMode.specific:
-        await playSongByName(alarm.songName, volume: alarm.volume);
+        await playSongByName(allSongs, alarm.songName, volume: alarm.volume);
       case SoundMode.random:
-        final shuffled = kSongCatalog.toList()..shuffle();
-        await _playAsset(shuffled.first.asset, alarm.volume);
+        final shuffled = allSongs.toList()..shuffle();
+        await _play(shuffled.first, alarm.volume);
       case SoundMode.pool:
         Pool? pool;
         for (final p in pools) {
@@ -48,7 +61,7 @@ class AudioService {
         final firstName = (pool != null && pool.songs.isNotEmpty)
             ? pool.songs.first.name
             : null;
-        await playSongByName(firstName, volume: alarm.volume);
+        await playSongByName(allSongs, firstName, volume: alarm.volume);
     }
   }
 

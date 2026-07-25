@@ -46,7 +46,8 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
   void initState() {
     super.initState();
     if (widget.playInApp) {
-      _audio.playForAlarm(widget.alarm, context.read<AppState>().pools);
+      final app = context.read<AppState>();
+      _audio.playForAlarm(widget.alarm, app.pools, app.allSongs);
     }
   }
 
