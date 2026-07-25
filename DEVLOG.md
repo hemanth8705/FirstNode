@@ -321,4 +321,26 @@ project" error for `:app`.
 - `flutter build apk --debug` → **succeeds** (`app-debug.apk`) with the native alarm
   engine integrated.
 
+### 2026-07-25 — Time picker: scrollable wheels, 1-minute steps
+
+User feedback while testing on-device: the minute stepper jumped in 5-minute
+increments (ported directly from the original design) and should instead be
+1-minute and scrollable, matching how native mobile time pickers work.
+
+- [lib/screens/edit_alarm_screen.dart](lib/screens/edit_alarm_screen.dart): replaced
+  the ▲/▼ tap-to-step hour/minute columns with two `CupertinoPicker` scroll wheels
+  (hour 0-23, minute 0-59 — every value, so 1-minute granularity). `CupertinoPicker`
+  is a single iOS-style widget import from `flutter/cupertino.dart`; using it inside
+  a `MaterialApp` is a standard Flutter pattern and doesn't change the app's overall
+  theming.
+- The wheels' `FixedExtentScrollController`s are created **once** as state fields
+  (not rebuilt on every `build()`), so unrelated changes elsewhere on the same
+  screen (e.g. dragging the volume slider) don't reset their scroll position.
+- Removed the now-unused `_incHour/_decHour/_incMinute/_decMinute` and
+  `_timeColumn` methods.
+
+#### Verified
+- `flutter analyze` → **No issues found.**
+- `flutter test` → passes.
+
 _(further entries appended below as each piece is built)_

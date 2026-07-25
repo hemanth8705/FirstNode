@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPicker;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -29,19 +30,22 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
   late final TextEditingController _labelCtrl = TextEditingController(
     text: draft.label,
   );
+  // Created once (not in build()) so unrelated setState calls elsewhere on this
+  // screen — e.g. dragging the volume slider — don't reset the wheels' scroll
+  // position back to the initial hour/minute.
+  late final FixedExtentScrollController _hourCtrl = FixedExtentScrollController(
+    initialItem: draft.hour,
+  );
+  late final FixedExtentScrollController _minuteCtrl =
+      FixedExtentScrollController(initialItem: draft.minute);
 
   @override
   void dispose() {
     _labelCtrl.dispose();
+    _hourCtrl.dispose();
+    _minuteCtrl.dispose();
     super.dispose();
   }
-
-  // -------------------------------------------------------------- Time ------
-
-  void _incHour() => setState(() => draft.hour = (draft.hour + 1) % 24);
-  void _decHour() => setState(() => draft.hour = (draft.hour + 23) % 24);
-  void _incMinute() => setState(() => draft.minute = (draft.minute + 5) % 60);
-  void _decMinute() => setState(() => draft.minute = (draft.minute + 55) % 60);
 
   void _toggleDay(int d) => setState(() {
     if (draft.days.contains(d)) {
@@ -176,69 +180,68 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
     );
   }
 
+  /// Two scrollable wheels (hour 0-23, minute 0-59 — one-minute steps) rather
+  /// than tap-to-step arrows, matching how native mobile time pickers work.
   Widget _timePicker() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _timeColumn(
-          draft.hour.toString().padLeft(2, '0'),
-          onUp: _incHour,
-          onDown: _decHour,
-        ),
-        const SizedBox(width: 22),
-        Text(
-          ':',
-          style: TextStyle(
-            fontSize: 40,
-            fontWeight: FontWeight.w300,
-            color: AppColors.w(0.3),
+    return SizedBox(
+      height: 170,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: _wheel(
+              controller: _hourCtrl,
+              count: 24,
+              onChanged: (v) => draft.hour = v,
+            ),
           ),
-        ),
-        const SizedBox(width: 22),
-        _timeColumn(
-          draft.minute.toString().padLeft(2, '0'),
-          onUp: _incMinute,
-          onDown: _decMinute,
-        ),
-      ],
+          Text(
+            ':',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w300,
+              color: AppColors.w(0.3),
+            ),
+          ),
+          Expanded(
+            child: _wheel(
+              controller: _minuteCtrl,
+              count: 60,
+              onChanged: (v) => draft.minute = v,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _timeColumn(
-    String value, {
-    required VoidCallback onUp,
-    required VoidCallback onDown,
+  Widget _wheel({
+    required FixedExtentScrollController controller,
+    required int count,
+    required ValueChanged<int> onChanged,
   }) {
-    Widget arrow(String glyph, VoidCallback onTap) => GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
-        child: Text(
-          glyph,
-          style: TextStyle(fontSize: 18, color: AppColors.w(0.5)),
+    return CupertinoPicker(
+      scrollController: controller,
+      itemExtent: 44,
+      backgroundColor: Colors.transparent,
+      selectionOverlay: Container(
+        decoration: BoxDecoration(
+          border: Border.symmetric(horizontal: BorderSide(color: AppColors.w(0.1))),
         ),
       ),
-    );
-    return Column(
+      onSelectedItemChanged: (i) => setState(() => onChanged(i)),
       children: [
-        arrow('▲', onUp),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: 70,
-          child: Text(
-            value,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 48,
-              fontWeight: FontWeight.w300,
-              letterSpacing: -1,
-              color: Colors.white,
+        for (var i = 0; i < count; i++)
+          Center(
+            child: Text(
+              i.toString().padLeft(2, '0'),
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w300,
+                color: Colors.white,
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        arrow('▼', onDown),
       ],
     );
   }
