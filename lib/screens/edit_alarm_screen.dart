@@ -7,6 +7,7 @@ import '../models/puzzle.dart';
 import '../models/song.dart';
 import '../services/audio_service.dart';
 import '../services/formatters.dart';
+import '../services/post_alarm_reminder.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_widgets.dart';
@@ -92,6 +93,20 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
     }
   }
 
+  Future<void> _openReminderSongPicker() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => SongPickerScreen(
+          mode: SongPickerMode.specific,
+          selectedName: draft.reminder.songName,
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() => draft.reminder.songName = result);
+    }
+  }
+
   Future<void> _openPoolPicker() async {
     final result = await Navigator.of(context).push<String>(
       MaterialPageRoute(
@@ -155,6 +170,8 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
                   _gradual(),
                   const SizedBox(height: 28),
                   _puzzles(),
+                  const SizedBox(height: 28),
+                  _postAlarmReminder(app),
                   if (!widget.isNew) ...[
                     const SizedBox(height: 28),
                     Align(
@@ -339,7 +356,11 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
       case SoundMode.specific:
         children.addAll([
           const SizedBox(height: 12),
-          _selectedSongCard(),
+          _toneCard(
+            songName: draft.songName,
+            onOpen: _openSongPicker,
+            onTogglePreview: _toggleEditPreview,
+          ),
           const SizedBox(height: 14),
           _trimSliders(),
         ]);
@@ -389,11 +410,15 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
     );
   }
 
-  /// The selected-song card for Specific mode: song name (scrolls if too long
-  /// to fit) on the left, a trim-aware preview Play/Pause button and a
-  /// chevron (both open the song picker) on the right.
-  Widget _selectedSongCard() {
-    final hasSong = draft.songName != null;
+  /// A chosen-tone card, shared by Specific mode and the post-alarm reminder:
+  /// song name (scrolls if too long to fit) on the left, a preview Play/Pause
+  /// button and a chevron (both open the song picker) on the right.
+  Widget _toneCard({
+    required String? songName,
+    required VoidCallback onOpen,
+    required VoidCallback onTogglePreview,
+  }) {
+    final hasSong = songName != null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -405,12 +430,12 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
         children: [
           Expanded(
             child: GestureDetector(
-              onTap: _openSongPicker,
+              onTap: onOpen,
               behavior: HitTestBehavior.opaque,
               child: SizedBox(
                 height: 20,
                 child: MarqueeOrText(
-                  text: draft.songName ?? 'Choose a song',
+                  text: songName ?? 'Choose a song',
                   style: TextStyle(
                     color: hasSong ? Colors.white : AppColors.w(0.5),
                     fontSize: 14,
@@ -420,10 +445,10 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          if (hasSong) _trimPreviewButton(),
+          if (hasSong) _previewButton(songName, onTogglePreview),
           const SizedBox(width: 8),
           GestureDetector(
-            onTap: _openSongPicker,
+            onTap: onOpen,
             behavior: HitTestBehavior.opaque,
             child: Icon(Icons.chevron_right, size: 18, color: AppColors.w(0.4)),
           ),
@@ -432,16 +457,16 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
     );
   }
 
-  Widget _trimPreviewButton() {
+  Widget _previewButton(String? songName, VoidCallback onTap) {
     return AnimatedBuilder(
       animation: Listenable.merge([_audio.previewingName, _audio.previewPlaying]),
       builder: (context, _) => PreviewButton(
         playing:
-            _audio.previewingName.value == draft.songName &&
+            _audio.previewingName.value == songName &&
             _audio.previewPlaying.value,
         size: 28,
         filled: true,
-        onTap: _toggleEditPreview,
+        onTap: onTap,
       ),
     );
   }
@@ -460,6 +485,22 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
         draft.songName,
         startSec: draft.start,
         endSec: draft.end,
+        volume: draft.volume,
+      );
+    }
+  }
+
+  /// The reminder plays its tone from the start, so unlike the alarm preview
+  /// there's no trim range to honor here.
+  Future<void> _toggleReminderPreview() async {
+    final name = draft.reminder.songName;
+    final isThis = _audio.previewingName.value == name;
+    if (isThis && _audio.previewPlaying.value) {
+      await _audio.stopPreview();
+    } else {
+      await _audio.preview(
+        context.read<AppState>().allSongs,
+        name,
         volume: draft.volume,
       );
     }
@@ -703,6 +744,78 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
         ),
       ],
     );
+  }
+
+  /// "Post-alarm reminder": the follow-up nudges that keep coming after this
+  /// alarm is dismissed until the user taps one. Sits after the puzzles because
+  /// that's the order the user experiences it in — ring, dismiss, then this.
+  Widget _postAlarmReminder(AppState app) {
+    final r = draft.reminder;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const SectionLabel('POST-ALARM REMINDER'),
+            AppToggle(value: r.enabled, onTap: () => _toggleReminder(app)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'After this alarm is dismissed, keeps sending a notification until you '
+          'tap it to confirm you are actually awake. Swiping it away or ignoring '
+          'it just schedules the next one.',
+          style: TextStyle(color: AppColors.w(0.32), fontSize: 12, height: 1.5),
+        ),
+        if (r.enabled) ...[
+          const SizedBox(height: 18),
+          const SectionLabel('REMIND ME EVERY'),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final minutes in kReminderIntervals)
+                ChoicePill(
+                  label: fmtReminderInterval(minutes),
+                  active: r.intervalMinutes == minutes,
+                  onTap: () => setState(() => r.intervalMinutes = minutes),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const SectionLabel('REMINDER SOUND'),
+          const SizedBox(height: 10),
+          _toneCard(
+            songName: r.songName,
+            onOpen: _openReminderSongPicker,
+            onTogglePreview: _toggleReminderPreview,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Plays once per reminder at this alarm\'s volume — a nudge, not a '
+            'second alarm.',
+            style: TextStyle(color: AppColors.w(0.32), fontSize: 12, height: 1.5),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Turning the reminder on fills in a tone straight away — whatever this alarm
+  /// itself would play — so the sound row is never blank and the reminder can
+  /// never end up silent.
+  void _toggleReminder(AppState app) {
+    final r = draft.reminder;
+    setState(() {
+      r.enabled = !r.enabled;
+      r.songName ??= resolveReminderTone(draft, app.pools, app.allSongs).name;
+    });
   }
 
   Widget _outlineButton(String label, VoidCallback onTap) {

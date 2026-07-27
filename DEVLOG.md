@@ -760,4 +760,143 @@ either symptom persists after this update.
   phone genuinely locked (screen off, not just backgrounded) through an actual
   alarm firing, since that's precisely the state the bug only showed up in.
 
+### 2026-07-27 — Feature: Post-Alarm Reminder
+
+Many people dismiss an alarm and go straight back to sleep. This feature keeps
+nudging after dismissal until the user *actively confirms* they're awake by
+tapping a reminder notification. Per-alarm setting: on/off, interval (1 / 2 / 5
+/ 10 / 15 / 30 minutes), and its own ringtone from the existing tone library.
+
+#### The one hard requirement that drove the whole design
+
+"Notifications continue until the user taps one" plus "works reliably even if
+the app is running in the background." Between two nudges the app can be
+backgrounded, killed by the OS, or swiped out of recents — so **nothing in the
+repeating loop may depend on Dart running**. Anything scheduled from Dart, or
+that needs Dart to schedule its successor, breaks the chain the first time the
+process goes away, which is precisely the situation the feature exists for.
+
+#### Why not reuse the `alarm` package for the nudges
+
+That was the obvious first idea — it already fires at an exact time with the app
+killed, plays our tones, vibrates, and shows a notification. Three things ruled
+it out:
+
+1. **No way to detect a tap.** Its notification's content intent is the plain
+   launcher intent with no extras, so from Dart "the user tapped the reminder"
+   is indistinguishable from "the user opened the app." The spec is explicit
+   that only a tap acknowledges — swiping away or ignoring must not — so
+   guessing from app-resume wasn't good enough.
+2. **Its ringing model is the wrong shape.** One alarm rings at a time and must
+   be explicitly stopped; `AlarmService` refuses a new alarm while
+   `ringingAlarmIds` is non-empty (`allowAlarmOverlap` defaults to false) and
+   *unsaves* it. A nudge nobody stops would therefore silently swallow the next
+   nudge — the exact failure mode the feature can't have.
+3. **Chaining would still need Dart** to schedule occurrence N+1 when N fires.
+
+`flutter_local_notifications` was the other candidate, and it *does* report taps
+cleanly — but a notification channel bakes in its sound at creation and can
+never change it, and channel sounds must be `res/raw` resources or content URIs.
+Our tones are Flutter assets plus arbitrary user-imported files, so "pick a
+reminder ringtone" would have been unimplementable after first run.
+
+#### The design: the chain lives in native code
+
+`android/app/src/main/kotlin/com/firstnode/firstnode/reminder/`
+
+| File | Role |
+| --- | --- |
+| `ReminderStore.kt` | The one active chain (alarm id, label, interval, tone path, volume) + a pending acknowledgement, in its own `SharedPreferences` file. |
+| `ReminderScheduler.kt` | Arms the next nudge with `AlarmManager`; cancels; re-arms after boot. |
+| `ReminderReceiver.kt` | One tick: arm the follow-up, post the notification, start the sound service. |
+| `ReminderSoundService.kt` | Short-lived foreground service that plays the tone once and vibrates. |
+| `ReminderNotifier.kt` | The channel and the notification, including the tap → acknowledge intent. |
+| `ReminderBridge.kt` | `MethodChannel` (`firstnode/post_alarm_reminder`) + handling of the tap intent. |
+
+Only **one** alarm is pending at a time; the receiver arms the following one
+*before* doing anything else, so a nudge that fails to show or sound can't end
+the chain. Dart decides *whether* a chain runs; Android runs it.
+
+#### Android details worth remembering
+
+- **`setAlarmClock`, not `setExactAndAllowWhileIdle`.** Doze throttles the
+  latter to roughly one firing per nine minutes per app, which would quietly
+  turn "every 1/2/5 minutes" into "every ~9 minutes" for exactly our scenario —
+  phone face-down, screen off, user back asleep. `setAlarmClock` is exempt and
+  never rate-limited. The cost is the system's next-alarm indicator showing the
+  upcoming nudge, which for an alarm clock app is honest rather than surprising.
+  (Note this differs from the `alarm` package, which uses
+  `setExactAndAllowWhileIdle` — fine for a once-a-day alarm, not for a
+  one-minute loop.)
+- **The tap goes straight to `MainActivity`**, not through a receiver that then
+  starts it: Android 12+ bans that "notification trampoline". The
+  acknowledgement is recorded in `MainActivity.onCreate` *before* `super`, so it
+  lands even if the Flutter engine never finishes starting. Dart picks it up
+  later via `consumeAck` (which clears it, so the confirmation shows exactly
+  once whether the app was already open or cold-started by the tap).
+- **The notification is deliberately *not* `ongoing`** and has no delete intent,
+  so it can be swiped away — and swiping it is not an acknowledgement.
+- **`STOP_FOREGROUND_DETACH`** when the tone finishes, so the notification
+  survives the service and stays in the shade to be tapped much later.
+- **The channel is silent and vibration-free**; the service plays the tone and
+  vibrates itself. That's what makes a *changeable* per-alarm ringtone possible
+  at all (see above), and it lets us skip vibration when the ringer is silent.
+- **Tone paths** reuse the two shapes `Song.asset` already has: a Flutter asset
+  key (`assets/sounds/x.wav` → `flutter_assets/…` via `AssetManager.openFd`) or
+  an absolute path for imported files — the same mapping the `alarm` package
+  applies to `assetAudioPath`, so bundled and imported tones both just work.
+- **Boot**: `SafeBootRescheduleReceiver` re-arms an unacknowledged chain. Unlike
+  the alarms it guards, there's no stale-time hazard — a reminder has no correct
+  wall-clock time, only "keep asking every N minutes."
+
+#### Lightweight on purpose
+
+The tone plays **once** per nudge (not looped until stopped), capped at 30
+seconds so a long imported song can't drone on, at the alarm's own volume, with
+one short vibration. No ring screen, no puzzles. `USAGE_ALARM` though, not the
+notification stream — a reminder nobody hears because the phone is on silent
+would defeat the point.
+
+#### Dart side
+
+- `models/alarm.dart` — new `PostAlarmReminder` (enabled / intervalMinutes /
+  songName) on `Alarm`, with `clone`/JSON. Saves that predate the feature have
+  no `reminder` key and default to off.
+- `services/post_alarm_reminder.dart` — the channel client, plus
+  `resolveReminderTone()`: the reminder's own tone if set, else the alarm's
+  (Specific mode) or its pool's first tone (Random/Pools — a nudge plays one
+  tone once, so there's nothing to shuffle), else the first bundled tone. The
+  reminder can never end up silent.
+- `main.dart` — the chain starts by watching the **`Alarm.ringing` stream for an
+  alarm leaving the set**, not off the Dismiss button. That way it also starts
+  when the alarm is stopped from its notification's Stop button, which never
+  reaches `_dismissReal`. Also: acknowledgement is consumed on resume *and* at
+  startup (a cold start from a tap never fires a lifecycle change), a chain is
+  cancelled if its alarm is deleted or has its reminder switched off mid-chain,
+  and a newly ringing alarm supersedes any chain still running.
+- `screens/edit_alarm_screen.dart` — new section after "Puzzles to dismiss",
+  matching the order the user experiences: ring → dismiss → reminders. Turning
+  it on pre-fills the tone with whatever the alarm itself would play, so the row
+  is never blank. The song picker and preview button are reused as-is; the
+  selected-tone card was factored out of Specific mode into a shared `_toneCard`
+  rather than duplicated.
+
+#### Verified
+- `flutter analyze` → **No issues found** (Dart-only; doesn't check Kotlin).
+- `flutter test` → **11 tests pass**, including a new
+  `test/post_alarm_reminder_test.dart` covering the JSON round trip, the
+  pre-feature default, `clone` being a deep copy (so Cancel discards reminder
+  edits), and every `resolveReminderTone` fallback branch.
+- `flutter build apk --debug` → succeeds, confirming the six new Kotlin files
+  compile.
+- **Not yet verified on-device** — no Android device was attached this session
+  (`flutter devices` showed only Windows/Chrome/Edge). The whole chain is native
+  and time-based, so it needs a real device: dismiss an alarm with the reminder
+  on, confirm the nudge arrives on schedule with the chosen tone, confirm
+  swiping it away still produces the next one, and confirm tapping it opens the
+  app and ends the chain. Worth testing with the app swiped out of recents too,
+  since that's the case the native design exists for — and on this Xiaomi/POCO
+  device, with the MIUI/HyperOS autostart and battery settings noted in the
+  previous entry.
+
 _(further entries appended below as each piece is built)_

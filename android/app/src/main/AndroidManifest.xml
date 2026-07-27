@@ -66,6 +66,20 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
+
+        <!-- Post-alarm reminders. The chain runs entirely here in native code
+             (AlarmManager -> receiver -> short foreground service) so it keeps
+             nudging with the app backgrounded or its process killed, which is
+             the only way "repeat until acknowledged" can be relied on.
+             Both are internal: only our own AlarmManager/receiver start them. -->
+        <receiver
+            android:name=".reminder.ReminderReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".reminder.ReminderSoundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

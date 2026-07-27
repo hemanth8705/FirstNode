@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.firstnode.firstnode.reminder.ReminderScheduler
 import com.gdelataillade.alarm.api.AlarmApiImpl
 import com.gdelataillade.alarm.services.AlarmStorage
 import java.util.Date
@@ -34,6 +35,12 @@ class SafeBootRescheduleReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+
+        // A post-alarm reminder chain nobody acknowledged is still owed to the
+        // user, and AlarmManager forgot it across the reboot. Unlike the alarms
+        // below there's no stale-time hazard: a reminder has no "correct" wall
+        // clock time, only "keep asking every N minutes."
+        ReminderScheduler.rearmAfterBoot(context)
 
         val now = Date()
         val alarms = AlarmStorage(context).getSavedAlarms()

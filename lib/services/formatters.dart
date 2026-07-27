@@ -17,6 +17,9 @@ String fmtMMSS(int sec) {
   return '$m:${s.toString().padLeft(2, '0')}';
 }
 
+/// The post-alarm reminder interval, e.g. 5 -> "5 min".
+String fmtReminderInterval(int minutes) => '$minutes min';
+
 /// "Once" / "Every day" / "M W F" style summary of repeat days.
 String repeatSummary(List<int> days) {
   if (days.isEmpty) return 'Once';

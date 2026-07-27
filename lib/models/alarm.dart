@@ -42,6 +42,50 @@ class Gradual {
   );
 }
 
+/// The intervals offered for [PostAlarmReminder.intervalMinutes].
+const List<int> kReminderIntervals = [1, 2, 5, 10, 15, 30];
+
+/// "Post-alarm reminder": after this alarm is dismissed, keep nudging the user
+/// every [intervalMinutes] until they tap the reminder notification — so
+/// dismissing an alarm and falling straight back asleep doesn't go unnoticed.
+///
+/// The nudge is a lightweight notification, not a second full alarm: the tone
+/// plays once (rather than looping until dismissed) and there's no ring screen
+/// or puzzle. Only tapping the notification counts as "I'm awake"; swiping it
+/// away or ignoring it schedules the next one.
+class PostAlarmReminder {
+  bool enabled;
+  int intervalMinutes; // one of kReminderIntervals
+  /// Tone to play, separate from the alarm's own. Null means "not chosen yet" —
+  /// [resolveReminderTone] then falls back to the alarm's tone.
+  String? songName;
+
+  PostAlarmReminder({
+    this.enabled = false,
+    this.intervalMinutes = 5,
+    this.songName,
+  });
+
+  PostAlarmReminder clone() => PostAlarmReminder(
+    enabled: enabled,
+    intervalMinutes: intervalMinutes,
+    songName: songName,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'enabled': enabled,
+    'intervalMinutes': intervalMinutes,
+    'songName': songName,
+  };
+
+  factory PostAlarmReminder.fromJson(Map<String, dynamic> j) =>
+      PostAlarmReminder(
+        enabled: j['enabled'] ?? false,
+        intervalMinutes: j['intervalMinutes'] ?? 5,
+        songName: j['songName'],
+      );
+}
+
 class Alarm {
   int id;
   int hour; // 0..23
@@ -59,6 +103,7 @@ class Alarm {
 
   Gradual gradual;
   List<Puzzle> puzzles;
+  PostAlarmReminder reminder;
 
   Alarm({
     required this.id,
@@ -75,9 +120,11 @@ class Alarm {
     this.volume = 70,
     Gradual? gradual,
     List<Puzzle>? puzzles,
+    PostAlarmReminder? reminder,
   }) : days = days ?? [],
        gradual = gradual ?? Gradual(),
-       puzzles = puzzles ?? [];
+       puzzles = puzzles ?? [],
+       reminder = reminder ?? PostAlarmReminder();
 
   /// Minutes since midnight — used to sort alarms by time.
   int get minutesOfDay => hour * 60 + minute;
@@ -98,6 +145,7 @@ class Alarm {
     volume: volume,
     gradual: gradual.clone(),
     puzzles: puzzles.map((p) => p.clone()).toList(),
+    reminder: reminder.clone(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -115,6 +163,7 @@ class Alarm {
     'volume': volume,
     'gradual': gradual.toJson(),
     'puzzles': puzzles.map((p) => p.toJson()).toList(),
+    'reminder': reminder.toJson(),
   };
 
   factory Alarm.fromJson(Map<String, dynamic> j) => Alarm(
@@ -134,5 +183,10 @@ class Alarm {
     puzzles: (j['puzzles'] as List)
         .map((e) => Puzzle.fromJson(Map<String, dynamic>.from(e)))
         .toList(),
+    // Saves made before post-alarm reminders existed have no 'reminder' key —
+    // they fall back to the default (disabled).
+    reminder: j['reminder'] == null
+        ? PostAlarmReminder()
+        : PostAlarmReminder.fromJson(Map<String, dynamic>.from(j['reminder'])),
   );
 }

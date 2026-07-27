@@ -12,6 +12,7 @@ import 'screens/ringing_screen.dart';
 import 'services/alarm_scheduler.dart';
 import 'services/audio_service.dart';
 import 'services/permissions.dart';
+import 'services/post_alarm_reminder.dart';
 import 'services/puzzle_engine.dart';
 import 'services/storage.dart';
 import 'state/app_state.dart';
@@ -20,6 +21,11 @@ import 'theme/app_theme.dart';
 /// Lets the alarm ring handler navigate from outside the widget tree (e.g. when
 /// the app is launched by a firing alarm).
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+/// Lets us show a snack bar from outside the widget tree — used to confirm a
+/// post-alarm reminder was acknowledged, which can happen on a cold start.
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,15 +53,25 @@ class FirstNodeApp extends StatefulWidget {
   State<FirstNodeApp> createState() => _FirstNodeAppState();
 }
 
-class _FirstNodeAppState extends State<FirstNodeApp> {
+class _FirstNodeAppState extends State<FirstNodeApp>
+    with WidgetsBindingObserver {
   StreamSubscription<AlarmSet>? _ringSub;
   bool _handlingRing = false;
+
+  /// Alarm ids ringing as of the last stream event, so we can spot the moment
+  /// one *stops* — which is when a post-alarm reminder chain begins. Watching
+  /// the transition (rather than only the in-app Dismiss button) means the
+  /// reminder also starts when the alarm is stopped from its notification.
+  Set<int> _ringingIds = {};
+
+  final PostAlarmReminderService _reminders = PostAlarmReminderService();
 
   @override
   void initState() {
     super.initState();
     if (widget.scheduler != null) {
-      _ringSub = Alarm.ringing.listen(_onRing);
+      WidgetsBinding.instance.addObserver(this);
+      _ringSub = Alarm.ringing.listen(_onRingingChanged);
       _bootstrap();
     }
   }
@@ -64,23 +80,53 @@ class _FirstNodeAppState extends State<FirstNodeApp> {
   /// our alarm list, and schedule everything once.
   Future<void> _bootstrap() async {
     await widget.appState.ready;
-    widget.appState.onAlarmsChanged = () => widget.scheduler!.syncAll(
-      widget.appState.alarms,
-      widget.appState.pools,
-      widget.appState.allSongs,
-    );
+    widget.appState.onAlarmsChanged = () {
+      widget.scheduler!.syncAll(
+        widget.appState.alarms,
+        widget.appState.pools,
+        widget.appState.allSongs,
+      );
+      _syncRemindersWithAlarms();
+    };
     await AlarmPermissions.ensure();
     await widget.scheduler!.syncAll(
       widget.appState.alarms,
       widget.appState.pools,
       widget.appState.allSongs,
     );
+    // Covers a cold start caused by tapping a reminder notification, where no
+    // lifecycle change ever fires because the app starts up already resumed.
+    await _checkReminderAcknowledged();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ringSub?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Tapping a reminder notification brings the app forward; that's where the
+    // native side left the acknowledgement for us.
+    if (state == AppLifecycleState.resumed) _checkReminderAcknowledged();
+  }
+
+  // ------------------------------------------------------------- Ringing ----
+
+  /// Every change to the set of ringing alarms: an alarm that has just started
+  /// ringing gets the ring/puzzle screen, and one that has just stopped starts
+  /// its post-alarm reminder chain.
+  void _onRingingChanged(AlarmSet alarmSet) {
+    final ids = alarmSet.alarms.map((a) => a.id).toSet();
+    final stopped = _ringingIds.difference(ids);
+    _ringingIds = ids;
+
+    for (final id in stopped) {
+      _onAlarmStopped(id);
+    }
+    if (ids.isNotEmpty) _onRing(alarmSet);
   }
 
   /// A real alarm is ringing: find our alarm, show the ring/puzzle screen, and
@@ -88,6 +134,10 @@ class _FirstNodeAppState extends State<FirstNodeApp> {
   Future<void> _onRing(AlarmSet alarmSet) async {
     if (_handlingRing || alarmSet.alarms.isEmpty) return;
     _handlingRing = true;
+
+    // A fresh alarm supersedes any reminder chain still running from an earlier
+    // one — it would otherwise nudge over the top of the alarm.
+    await _reminders.cancel();
 
     await widget.appState.ready;
     final ringingId = alarmSet.alarms.first.id;
@@ -155,6 +205,56 @@ class _FirstNodeAppState extends State<FirstNodeApp> {
     }
   }
 
+  // ------------------------------------------------- Post-alarm reminders ----
+
+  /// An alarm stopped ringing (dismissed in-app, or stopped from its
+  /// notification): hand off to the native reminder chain if this alarm asks
+  /// for one. From here on the nudges are Android's job, so they keep coming
+  /// even if this process goes away.
+  Future<void> _onAlarmStopped(int alarmId) async {
+    await widget.appState.ready;
+    for (final a in widget.appState.alarms) {
+      if (a.id == alarmId) {
+        if (a.reminder.enabled) {
+          await _reminders.start(
+            a,
+            widget.appState.pools,
+            widget.appState.allSongs,
+          );
+        }
+        return;
+      }
+    }
+  }
+
+  /// Stop a running chain whose alarm was deleted, or had its reminder switched
+  /// off, while it was still nudging.
+  Future<void> _syncRemindersWithAlarms() async {
+    final activeId = await _reminders.activeAlarmId();
+    if (activeId == null) return;
+    for (final a in widget.appState.alarms) {
+      if (a.id == activeId) {
+        if (!a.reminder.enabled) await _reminders.cancel();
+        return;
+      }
+    }
+    await _reminders.cancel(); // alarm deleted
+  }
+
+  Future<void> _checkReminderAcknowledged() async {
+    if (widget.scheduler == null) return;
+    final alarmId = await _reminders.consumeAcknowledgement();
+    if (alarmId == null) return;
+    scaffoldMessengerKey.currentState
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text("Good morning — reminders stopped."),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
@@ -167,6 +267,7 @@ class _FirstNodeAppState extends State<FirstNodeApp> {
       ],
       child: MaterialApp(
         navigatorKey: navigatorKey,
+        scaffoldMessengerKey: scaffoldMessengerKey,
         title: 'FirstNode',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
