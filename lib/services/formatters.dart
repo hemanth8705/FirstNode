@@ -1,3 +1,4 @@
+import '../models/pool.dart';
 import '../models/puzzle.dart';
 
 /// Small pure functions that turn data into the short strings shown in the UI.
@@ -26,6 +27,24 @@ String repeatSummary(List<int> days) {
   if (days.length == 7) return 'Every day';
   final sorted = [...days]..sort();
   return sorted.map((d) => kDayLabels[d]).join(' ');
+}
+
+/// "6 songs · shuffle · 2 frozen" — the second line of a row in the pool list.
+/// The frozen part is only shown when it actually affects playback.
+String poolSummary(Pool pool) {
+  final count = pool.songs.length;
+  final parts = ['$count song${count == 1 ? '' : 's'}', pool.order.name];
+  if (pool.order == PoolOrder.shuffle && pool.effectiveFrozenCount > 0) {
+    parts.add('${pool.effectiveFrozenCount} frozen');
+  }
+  return parts.join(' · ');
+}
+
+/// "0:00–0:12 · 80%" for one song inside a pool, with "· frozen" appended when
+/// shuffle is holding it in place.
+String poolSongSummary(PoolSong song, {bool frozen = false}) {
+  final base = '${fmtMMSS(song.start)}–${fmtMMSS(song.end)} · ${song.volume}%';
+  return frozen ? '$base · frozen' : base;
 }
 
 /// One-line description of a puzzle for the "Puzzles to dismiss" list.

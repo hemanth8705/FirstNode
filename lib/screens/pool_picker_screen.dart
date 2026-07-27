@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/pool.dart';
+import '../services/formatters.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_widgets.dart';
@@ -101,7 +102,7 @@ class PoolPickerScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${p.songs.length} songs · ${p.order.name}',
+                    poolSummary(p),
                     style: TextStyle(color: AppColors.w(0.4), fontSize: 12),
                   ),
                 ],

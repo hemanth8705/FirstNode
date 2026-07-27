@@ -126,10 +126,12 @@ class AudioService {
   /// start/end range at its own relative volume (combined with the alarm's
   /// overall volume), automatically advancing to the next song and looping
   /// back to the first once the list is exhausted — continues until [stop]
-  /// is called. Linear order plays the list in order; shuffle shuffles once
-  /// at the start of ringing and loops that order. If gradual volume is
-  /// enabled, the combined volume ramps in linearly over its configured
-  /// duration, continuing seamlessly across song changes.
+  /// is called. The order comes from [resolvePlayOrder] (linear plays the
+  /// user's arrangement; shuffle keeps the pool's frozen songs first and
+  /// randomizes the rest) and is decided once at the start of ringing, so the
+  /// same order repeats on each pass. If gradual volume is enabled, the
+  /// combined volume ramps in linearly over its configured duration,
+  /// continuing seamlessly across song changes.
   Future<void> playPool(Pool pool, List<Song> allSongs, Alarm alarm) async {
     _cancelPoolTimers();
     _trimSub?.cancel();
@@ -140,9 +142,7 @@ class AudioService {
     _poolActive = true;
     _poolCatalog = allSongs;
     _poolBaseVolume = alarm.volume;
-    _poolQueue = pool.order == PoolOrder.shuffle
-        ? (pool.songs.toList()..shuffle())
-        : List.of(pool.songs);
+    _poolQueue = resolvePlayOrder(pool);
     _poolIndex = 0;
     if (alarm.gradual.enabled && alarm.gradual.duration > 0) {
       _fadeStopwatch = Stopwatch()..start();

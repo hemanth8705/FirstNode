@@ -394,7 +394,7 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            "Plays according to the pool's own order — Linear plays it in sequence, Shuffle picks randomly.",
+            "Plays according to the pool's own order — Linear follows the order you arranged, Shuffle randomizes it while keeping any frozen songs first.",
             style: TextStyle(
               color: AppColors.w(0.4),
               fontSize: 13,

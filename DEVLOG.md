@@ -899,4 +899,135 @@ would defeat the point.
   device, with the MIUI/HyperOS autostart and battery settings noted in the
   previous entry.
 
+### 2026-07-27 — Feature: manual pool ordering + frozen songs
+
+Two related additions to pool playback, both from the notes in `TODO.md`:
+songs can be dragged into any order, and Shuffle can be told to leave the first
+few of them alone. So "always open with this one, surprise me after that."
+
+#### Mapping the request onto what already existed
+
+The request talks about "Sequential Mode" and "Random Pool Mode". In this app
+those are one pool setting, not two modes:
+
+| Request | This app |
+| --- | --- |
+| Sequential playback | `SoundMode.pool` + `PoolOrder.linear` |
+| Random Pool playback | `SoundMode.pool` + `PoolOrder.shuffle` |
+
+Note there is also a separate `SoundMode.random`, which picks **one** song from
+the pool and loops it. Frozen songs deliberately don't apply there: with a single
+song there is no order to preserve, and "freeze first 1" would turn Random mode
+into "always play the same song" — the opposite of what it's for. The request's
+own wording ("each song appears only once before repeating", and its six-song
+worked example) is about a sequence, which is the `SoundMode.pool` path.
+
+#### One pure function decides the order
+
+`resolvePlayOrder(pool, {random})` in [lib/models/pool.dart](lib/models/pool.dart):
+
+```dart
+if (pool.order == PoolOrder.linear) return songs;   // the arrangement, exactly
+final tail = songs.sublist(frozen)..shuffle(random);
+return [...songs.take(frozen), ...tail];
+```
+
+Always a permutation of `pool.songs`, so every song still plays once before any
+repeat. `AudioService.playPool` now calls it instead of shuffling inline, which
+means the interesting logic is a pure function with no audio plugin attached —
+`random` is injectable, so the tests pin the behavior down across 25 seeds
+rather than hoping one shuffle happens to be revealing.
+
+`Pool.frozenCount` is stored, with `effectiveFrozenCount` clamping it to the
+number of songs actually in the pool: a count chosen when the pool had six songs
+must not misbehave after four are deleted. The editor also clamps the stored
+value on removal so the pills on screen match. Pools saved before this feature
+have no `frozenCount` key and default to 0 — identical shuffle behavior to before.
+
+**Left alone deliberately:** the order is still decided once when ringing starts
+and then loops, rather than being re-shuffled on each pass. The request asked to
+maintain the existing random behavior, and it already satisfies "each song once
+before repeating."
+
+#### Drag-and-drop: sliver list, not a nested one
+
+The editor was a single `ListView` holding the name field, order control and
+song cards. Putting a `ReorderableListView` inside it would have meant a nested
+scrollable with `shrinkWrap` — two scroll positions, and dragging a song toward
+the screen edge wouldn't scroll the form.
+
+Instead the screen is now one `CustomScrollView`: `SliverList` for the form
+above, `SliverReorderableList` for the songs, `SliverToBoxAdapter` for the
+delete link. One scroll position, so dragging past the top or bottom edge
+auto-scrolls the whole form the way you'd expect.
+
+Details that mattered:
+- **`onReorderItem`, not `onReorder`.** The latter is deprecated as of
+  v3.41.0-0.0.pre and hands you a "gap" index that needs a manual `-= 1` when
+  moving a song downward. `onReorderItem` gives the final index, so the handler
+  is just `insert(newIndex, removeAt(oldIndex))`.
+- **`ObjectKey(song)` for item keys**, not the index. A pool can legitimately
+  contain the same song twice, so the name isn't unique — but the `PoolSong`
+  instances are, and reordering only moves those instances around.
+- **The expanded card is tracked by identity, not index.** `_expandedIndex` would
+  have pointed at a different song after a drag; it's now `PoolSong? _expanded`.
+- **Item spacing lives inside each item.** A reorderable list has no room for
+  separators between children, so the 8px gap moved into the item's `Padding`.
+
+#### A bug the widget test caught
+
+`SliverReorderableList` renders the card you're dragging in an **overlay**, which
+sits outside the `Scaffold` and therefore has no `Material` ancestor. Picking up
+a card whose trim/volume sliders were open threw `No Material widget found` —
+`Slider` insists on a Material to draw its ink on. Fixed with a `proxyDecorator`
+that wraps the lifted card in `Material(type: MaterialType.transparency)`, which
+supplies the ancestor without altering how the card looks.
+
+Worth noting because nothing about the feature request hints at it, and it only
+fires in the specific combination "expand a song, then drag that same song."
+
+#### Testing drag gestures, for next time
+
+Two traps, both of which cost real time here:
+1. **Move the pointer in small steps.** A reorderable list recalculates the drop
+   slot on each pointer move, against geometry that is mid-animation. Teleporting
+   with a single `moveBy` evaluates that logic once against unshifted geometry and
+   lands in states a real finger never reaches — a sweep of drag distances gave
+   "no move" at exactly one row, "two places" at 1.6 rows, and "one place" at 2.
+   Twenty small steps gives the correct result in every direction.
+2. **Measure travel from the drag handles**, not from an assumed row height. The
+   moment one card is expanded the rows aren't uniform, and a height measured
+   between two titles is the *expanded* card's height.
+
+Also: the test view is sized 1000×2400, because a sliver list doesn't build
+off-screen children and the song cards would otherwise be unfindable.
+
+#### UI
+- **Pool editor** — a drag handle on each song card; a `FROZEN SONGS` row of
+  None / First 1…5 pills, shown only for Shuffle (linear has nothing to hold in
+  place) and offering at most one option per song in the pool. Frozen songs are
+  marked `· frozen` on their own card, so which songs are pinned is visible
+  rather than something you have to work out from a number.
+- **Pool list** — the summary line now reads `6 songs · shuffle · 2 frozen`, with
+  the frozen part shown only when it affects playback (and `1 song` no longer
+  reads `1 songs`).
+- **Edit alarm** — the Pools-mode hint now says Linear follows the order you
+  arranged and Shuffle keeps frozen songs first.
+
+#### Verified
+- `flutter analyze` → **No issues found.**
+- `flutter test` → **34 tests pass**, 19 of them new:
+  `test/pool_play_order_test.dart` (frozen head preserved and tail permuted
+  across 25 seeds, no duplicates, linear untouched, freezing everything, a stale
+  count clamped, empty pool, the input pool not mutated, JSON round trip
+  including a reorder, pre-feature default, summaries) and
+  `test/pool_editor_screen_test.dart` (drags down one / down to the end / to the
+  top, a reorder feeding the frozen selection, the pills, Shuffle-only
+  visibility, clamping on removal, and the expanded-card case that found the
+  Material bug).
+- `flutter build apk --debug` → succeeds.
+- **Not yet verified on-device** — still no Android device attached. What needs a
+  real device is the feel of the drag gesture (handle size, auto-scroll speed
+  while dragging near the edges) and hearing a frozen shuffle actually ring.
+
 _(further entries appended below as each piece is built)_
