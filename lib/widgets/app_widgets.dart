@@ -474,6 +474,166 @@ class BackHeader extends StatelessWidget {
   }
 }
 
+/// A centered icon + title + optional subtitle + optional call-to-action,
+/// used everywhere an empty list would otherwise just be blank.
+class EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const EmptyState({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.actionLabel,
+    this.onAction,
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 36, color: AppColors.w(0.25)),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.w(0.6), fontSize: 15),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                subtitle!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.w(0.35), fontSize: 13, height: 1.4),
+              ),
+            ],
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: onAction,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Text(
+                    actionLabel!,
+                    style: const TextStyle(
+                      color: AppColors.onAccent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A non-dismissible "Importing N of M — filename" dialog driven by a
+/// `ValueNotifier` of `(done, total, currentFileName)`, shared by every screen
+/// that runs a multi-file import.
+class ImportProgressDialog extends StatelessWidget {
+  final ValueNotifier<(int, int, String)> progress;
+  const ImportProgressDialog({required this.progress, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      content: ValueListenableBuilder<(int, int, String)>(
+        valueListenable: progress,
+        builder: (context, value, _) {
+          final (done, total, name) = value;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                total == 0 ? 'Preparing…' : 'Importing $done of $total',
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+              ),
+              if (name.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: AppColors.w(0.5), fontSize: 12),
+                ),
+              ],
+              const SizedBox(height: 16),
+              LinearProgressIndicator(
+                value: total == 0 ? null : done / total,
+                backgroundColor: AppColors.w(0.1),
+                color: Colors.white,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Shows a Cancel/Confirm dialog and resolves `true` only if the user tapped
+/// confirm. Used before every destructive action in the app (delete alarm,
+/// delete pool, remove a song from a pool, delete a library song).
+Future<bool> showConfirmDialog(
+  BuildContext context, {
+  required String title,
+  String? message,
+  String confirmLabel = 'Delete',
+  bool destructive = true,
+}) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
+      content: message == null
+          ? null
+          : Text(message, style: TextStyle(color: AppColors.w(0.55), fontSize: 14)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text('Cancel', style: TextStyle(color: AppColors.w(0.55))),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(
+            confirmLabel,
+            style: TextStyle(
+              color: destructive ? Colors.redAccent : Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
+}
+
 class _HeaderTextButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;

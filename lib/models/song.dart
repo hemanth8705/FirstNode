@@ -11,11 +11,25 @@ class Song {
   final String asset;
   final bool imported;
 
+  /// When this song was imported (epoch milliseconds), used to sort the
+  /// library by "date added". `0` for bundled tones and for songs imported
+  /// before this field existed.
+  final int dateAdded;
+
+  /// The picked file's name (before any collision-renaming) and size in
+  /// bytes, kept only for imported songs so a re-import of the same file can
+  /// be recognised as a duplicate. Null for bundled tones.
+  final String? originalFileName;
+  final int? sizeBytes;
+
   const Song({
     required this.name,
     required this.duration,
     required this.asset,
     this.imported = false,
+    this.dateAdded = 0,
+    this.originalFileName,
+    this.sizeBytes,
   });
 
   Map<String, dynamic> toJson() => {
@@ -23,6 +37,9 @@ class Song {
     'duration': duration,
     'asset': asset,
     'imported': imported,
+    'dateAdded': dateAdded,
+    'originalFileName': originalFileName,
+    'sizeBytes': sizeBytes,
   };
 
   factory Song.fromJson(Map<String, dynamic> j) => Song(
@@ -30,6 +47,9 @@ class Song {
     duration: j['duration'],
     asset: j['asset'],
     imported: j['imported'] ?? false,
+    dateAdded: j['dateAdded'] ?? 0,
+    originalFileName: j['originalFileName'],
+    sizeBytes: j['sizeBytes'],
   );
 }
 

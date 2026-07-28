@@ -13,14 +13,15 @@ import '../widgets/app_widgets.dart';
 ///   * [specific] — choosing the one tone for an alarm. Tapping a row just
 ///     selects/highlights it; the result is only returned when Done is
 ///     pressed (via `Navigator.pop(context, name)`).
-///   * [poolAdd]  — adding tones to a pool. Tapping a row adds it immediately
-///     (several can be added); Done just closes the screen.
+///   * [poolAdd]  — adding tones to a pool. Rows are checkboxes: pick as many
+///     as you like, then confirm with the "Add N songs" button, which calls
+///     [onAdd] once with the whole batch.
 enum SongPickerMode { specific, poolAdd }
 
 class SongPickerScreen extends StatefulWidget {
   final SongPickerMode mode;
   final String? selectedName;
-  final void Function(String name)? onAdd;
+  final void Function(List<String> names)? onAdd;
 
   const SongPickerScreen({
     required this.mode,
@@ -36,6 +37,7 @@ class SongPickerScreen extends StatefulWidget {
 class _SongPickerScreenState extends State<SongPickerScreen> {
   late final AudioService _audio = context.read<AudioService>();
   late String? _selected = widget.selectedName;
+  final Set<String> _checked = {};
 
   @override
   void dispose() {
@@ -43,12 +45,13 @@ class _SongPickerScreenState extends State<SongPickerScreen> {
     super.dispose();
   }
 
-  void _selectSong(String name) {
+  void _toggle(String name) {
     if (widget.mode == SongPickerMode.specific) {
       setState(() => _selected = name);
     } else {
-      widget.onAdd?.call(name);
-      _toast('Added $name');
+      setState(() {
+        if (!_checked.add(name)) _checked.remove(name);
+      });
     }
   }
 
@@ -65,24 +68,67 @@ class _SongPickerScreenState extends State<SongPickerScreen> {
   }
 
   Future<void> _import() async {
+    final app = context.read<AppState>();
+    final progress = ValueNotifier<(int, int, String)>((0, 0, ''));
+
+    final dialogFuture = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ImportProgressDialog(progress: progress),
+    );
+
+    ImportBatchResult? result;
     try {
-      final song = await SongImportService().importFromDevice();
-      if (!mounted) return;
-      await context.read<AppState>().addCustomSong(song);
-      if (!mounted) return;
-      _selectSong(song.name);
-    } on SongImportCancelled {
-      // User backed out of the picker — nothing to do.
-    } catch (e) {
-      if (mounted) _toast("Couldn't import that file");
+      result = await SongImportService().pickAndImport(
+        existing: app.customSongs,
+        onProgress: (done, total, name) => progress.value = (done, total, name),
+      );
+    } catch (_) {
+      result = const ImportBatchResult(imported: [], duplicates: 0, failed: []);
+    } finally {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
     }
+    await dialogFuture;
+    progress.dispose();
+    if (!mounted || result == null) return; // picker was cancelled
+
+    if (result.imported.isEmpty) {
+      if (result.duplicates > 0 || result.failed.isNotEmpty) {
+        _toast(_summary(result));
+      }
+      return;
+    }
+    await app.addCustomSongs(result.imported);
+    if (!mounted) return;
+    setState(() {
+      if (widget.mode == SongPickerMode.specific) {
+        _selected = result!.imported.first.name;
+      } else {
+        _checked.addAll(result!.imported.map((s) => s.name));
+      }
+    });
+    _toast(_summary(result));
+  }
+
+  String _summary(ImportBatchResult r) {
+    final parts = <String>['${r.imported.length} imported'];
+    if (r.duplicates > 0) {
+      parts.add(
+        '${r.duplicates} duplicate${r.duplicates == 1 ? '' : 's'} skipped',
+      );
+    }
+    if (r.failed.isNotEmpty) parts.add('${r.failed.length} failed');
+    return parts.join(' · ');
   }
 
   void _done() {
     _audio.stopPreview();
-    Navigator.of(
-      context,
-    ).pop(widget.mode == SongPickerMode.specific ? _selected : null);
+    if (widget.mode == SongPickerMode.specific) {
+      Navigator.of(context).pop(_selected);
+    } else {
+      widget.onAdd?.call(_checked.toList());
+      Navigator.of(context).pop();
+    }
   }
 
   void _back() {
@@ -105,31 +151,32 @@ class _SongPickerScreenState extends State<SongPickerScreen> {
   @override
   Widget build(BuildContext context) {
     final songs = context.watch<AppState>().allSongs;
+    final isPoolAdd = widget.mode == SongPickerMode.poolAdd;
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             BackHeader(
-              title: widget.mode == SongPickerMode.specific
-                  ? 'Choose a song'
-                  : 'Add song to pool',
+              title: isPoolAdd ? 'Add songs to pool' : 'Choose a song',
               onBack: _back,
-              trailing: GestureDetector(
-                onTap: _done,
-                behavior: HitTestBehavior.opaque,
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Text(
-                    'Done',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+              trailing: isPoolAdd
+                  ? null
+                  : GestureDetector(
+                      onTap: _done,
+                      behavior: HitTestBehavior.opaque,
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Text(
+                          'Done',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
             ),
             Expanded(
               child: ListView(
@@ -144,6 +191,25 @@ class _SongPickerScreenState extends State<SongPickerScreen> {
                 ],
               ),
             ),
+            if (isPoolAdd)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Opacity(
+                    opacity: _checked.isEmpty ? 0.4 : 1,
+                    child: IgnorePointer(
+                      ignoring: _checked.isEmpty,
+                      child: PrimaryButton(
+                        label: _checked.isEmpty
+                            ? 'Add songs'
+                            : 'Add ${_checked.length} song${_checked.length == 1 ? '' : 's'}',
+                        onTap: _done,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -186,20 +252,29 @@ class _SongPickerScreenState extends State<SongPickerScreen> {
   Widget _songRow(Song s) {
     final isSelected =
         widget.mode == SongPickerMode.specific && _selected == s.name;
+    final isChecked = widget.mode == SongPickerMode.poolAdd && _checked.contains(s.name);
     return GestureDetector(
-      onTap: () => _selectSong(s.name),
+      onTap: () => _toggle(s.name),
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.w(0.07) : Colors.transparent,
+          color: (isSelected || isChecked) ? AppColors.w(0.07) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppColors.w(0.3) : AppColors.w(0.08),
+            color: (isSelected || isChecked) ? AppColors.w(0.3) : AppColors.w(0.08),
           ),
         ),
         child: Row(
           children: [
+            if (widget.mode == SongPickerMode.poolAdd) ...[
+              Icon(
+                isChecked ? Icons.check_box : Icons.check_box_outline_blank,
+                size: 20,
+                color: isChecked ? Colors.white : AppColors.w(0.35),
+              ),
+              const SizedBox(width: 10),
+            ],
             Container(
               width: 34,
               height: 34,

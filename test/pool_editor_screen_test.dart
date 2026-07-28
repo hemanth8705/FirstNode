@@ -151,6 +151,8 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.close).last); // remove Charlie
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove')); // confirm the removal dialog
+    await tester.pumpAndSettle();
 
     expect(names(pool), ['Alpha', 'Bravo']);
     expect(pool.frozenCount, 2);

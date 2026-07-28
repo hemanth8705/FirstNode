@@ -6,7 +6,9 @@ import '../models/song.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/alarm_card.dart';
+import '../widgets/app_widgets.dart';
 import 'edit_alarm_screen.dart';
+import 'settings_screen.dart';
 
 /// The Home screen: the list of alarms with an add button.
 class HomeScreen extends StatelessWidget {
@@ -32,6 +34,12 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  void _openSettings(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+    );
+  }
+
   void _openEdit(BuildContext context, Alarm alarm) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -53,15 +61,32 @@ class HomeScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Alarms',
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.5,
-                      color: Colors.white,
+                  GestureDetector(
+                    onTap: () => _openSettings(context),
+                    behavior: HitTestBehavior.opaque,
+                    child: const Tooltip(
+                      message: 'Settings',
+                      child: Padding(
+                        padding: EdgeInsets.all(11),
+                        child: Icon(
+                          Icons.settings_outlined,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Expanded(
+                    child: Text(
+                      'Alarms',
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.5,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                   GestureDetector(
@@ -89,7 +114,7 @@ class HomeScreen extends StatelessWidget {
                       child: CircularProgressIndicator(color: Colors.white),
                     )
                   : app.alarms.isEmpty
-                  ? _buildEmpty()
+                  ? _buildEmpty(context)
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                       itemCount: app.alarms.length,
@@ -111,13 +136,13 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEmpty() {
-    return Center(
-      child: Text(
-        'No alarms yet.\nTap + to add one.',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: AppColors.w(0.4), fontSize: 15, height: 1.5),
-      ),
+  Widget _buildEmpty(BuildContext context) {
+    return EmptyState(
+      icon: Icons.alarm_add_outlined,
+      title: 'No alarms yet',
+      subtitle: 'Tap Add to create your first alarm.',
+      actionLabel: '+ Add alarm',
+      onAction: () => _openNew(context),
     );
   }
 }

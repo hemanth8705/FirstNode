@@ -10,23 +10,21 @@ import 'pool_editor_screen.dart';
 
 /// Lists the saved pools. Tapping a pool selects it (returns its id); the Edit
 /// button and "+ New" open the [PoolEditorScreen].
+///
+/// Set [selectable] to false to use this purely as a management list (e.g.
+/// from Settings' "Manage Pools") — row taps then open the pool for editing
+/// instead of returning a selection, and the "●" selected-indicator is
+/// hidden, since there's nothing to select *for*.
 class PoolPickerScreen extends StatelessWidget {
   final String? selectedPoolId;
-  const PoolPickerScreen({this.selectedPoolId, super.key});
+  final bool selectable;
+  const PoolPickerScreen({
+    this.selectedPoolId,
+    this.selectable = true,
+    super.key,
+  });
 
-  void _newPool(BuildContext context) {
-    final pool = Pool(
-      id: 'p${DateTime.now().millisecondsSinceEpoch}',
-      name: 'New pool',
-      order: PoolOrder.linear,
-      songs: [],
-    );
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PoolEditorScreen(pool: pool, isNew: true),
-      ),
-    );
-  }
+  void _newPool(BuildContext context) => openNewPool(context);
 
   void _editPool(BuildContext context, Pool pool) {
     Navigator.of(context).push(
@@ -60,11 +58,13 @@ class PoolPickerScreen extends StatelessWidget {
             ),
             Expanded(
               child: app.pools.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No pools yet. Tap + New.',
-                        style: TextStyle(color: AppColors.w(0.4), fontSize: 15),
-                      ),
+                  ? EmptyState(
+                      icon: Icons.queue_music_outlined,
+                      title: 'No pools yet',
+                      subtitle: 'Create a pool to cycle through several songs '
+                          'in one alarm.',
+                      actionLabel: '+ New pool',
+                      onAction: () => _newPool(context),
                     )
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -89,7 +89,9 @@ class PoolPickerScreen extends StatelessWidget {
         children: [
           Expanded(
             child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(p.id),
+              onTap: () => selectable
+                  ? Navigator.of(context).pop(p.id)
+                  : _editPool(context, p),
               behavior: HitTestBehavior.opaque,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,7 +111,7 @@ class PoolPickerScreen extends StatelessWidget {
               ),
             ),
           ),
-          if (selectedPoolId == p.id)
+          if (selectable && selectedPoolId == p.id)
             const Padding(
               padding: EdgeInsets.only(right: 14),
               child: Text(
@@ -135,4 +137,18 @@ class PoolPickerScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Creates a fresh empty pool and opens it for editing — shared by this
+/// screen's "+ New" button and Settings' "Create Pool" shortcut.
+void openNewPool(BuildContext context) {
+  final pool = Pool(
+    id: 'p${DateTime.now().millisecondsSinceEpoch}',
+    name: 'New pool',
+    order: PoolOrder.linear,
+    songs: [],
+  );
+  Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => PoolEditorScreen(pool: pool, isNew: true)),
+  );
 }

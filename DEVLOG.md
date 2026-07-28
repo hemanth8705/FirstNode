@@ -1030,4 +1030,101 @@ off-screen children and the song cards would otherwise be unfindable.
   real device is the feel of the drag gesture (handle size, auto-scroll speed
   while dragging near the edges) and hearing a frozen shuffle actually ring.
 
+### 2026-07-28 — Feature: Settings page, Library management, and a pass of confirmation dialogs
+
+Until now the app had exactly one entry point — Home — and everything else
+(songs, pools) was only reachable as a side-effect of editing a specific
+alarm. This adds a real Settings page, turns song import from
+one-file-at-a-time into a proper batch operation, gives pools a multi-select
+"add songs" flow instead of tap-one-repeat, and — the change with the biggest
+correctness impact — adds confirmation dialogs before every destructive
+action, since none existed anywhere in the app before this.
+
+A full UX audit was written first, at [UX_AUDIT.md](UX_AUDIT.md) — it's a
+standing document (unlike this log) covering pain points across every area in
+the brief (navigation, empty states, accessibility, Play Store readiness,
+etc.) and what's deliberately *not* fixed yet (a real app icon and release
+signing keystore both need developer-supplied material this pass doesn't
+have).
+
+#### Navigation
+A gear icon now sits at the top-left of Home (`lib/screens/home_screen.dart`),
+opening a new `SettingsScreen` with Library / Pools / General sections. Every
+row in it reuses a screen that already existed or was built for this pass —
+Settings is a router, not a new UI system. `PoolPickerScreen` gained a
+`selectable` flag: false when opened from Settings' "Manage Pools" so a row
+tap opens the pool for editing (there's nothing to "select" for outside an
+alarm), true everywhere else, unchanged.
+
+#### Multi-file import + real duplicate detection
+`SongImportService.importFromDevice()` (one file) is now
+`pickAndImport()` (`FilePicker.pickFiles(..., allowMultiple: true)`),
+returning an `ImportBatchResult { imported, duplicates, failed }`. A picked
+file is skipped as a duplicate if its name+size already matches a song in the
+library *or* another file earlier in the same batch — `PlatformFile.size`
+comes free from the picker, so this costs no extra I/O per skipped file.
+`Song` gained `dateAdded`/`originalFileName`/`sizeBytes` to back this (all
+default to 0/null for bundled tones and pre-existing imports, so old saved
+data still loads). One bad file no longer aborts the batch — errors are
+caught per-file and rolled into the summary instead.
+
+Both import entry points (`SongPickerScreen`'s row, and the new Library
+screen) share this one method and the same `ImportProgressDialog` (added to
+`app_widgets.dart`) — a non-dismissible "Importing N of M — filename" dialog
+driven by a `ValueNotifier`.
+
+#### Library screen (`lib/screens/library_screen.dart`, new)
+Lists built-in tones (read-only, tagged) and imported songs (deletable)
+separately, with search, a sort menu (name / date added / duration), and a
+running count. Deleting an imported song calls the new
+`AppState.songUsage(name)` first, which scans every alarm's `songName` and
+every pool's song list — if it's in use, the confirm dialog says exactly
+where ("Used by 2 alarms and 1 pool…") before letting the delete proceed.
+`AppState.removeCustomSong` deletes the file off disk as well as the list
+entry. `addCustomSong` became `addCustomSongs` (a batch), since one import can
+now produce several songs at once.
+
+#### Pool multi-select add
+`SongPickerScreen`'s `poolAdd` mode changed from "tap a row, it's added
+immediately, picker stays open" to real checkboxes plus a bottom "Add N
+songs" button that commits the whole selection in one `onAdd(List<String>)`
+call. `PoolEditorScreen._addSong` now does one `setState` for the whole batch
+and shows one "Added N songs" toast instead of one per song.
+
+#### Confirmation dialogs, everywhere they were missing
+One shared `showConfirmDialog()` (`app_widgets.dart`) — Cancel/Confirm,
+destructive actions render the confirm label in red. Wired into: delete
+alarm (`edit_alarm_screen.dart` — previously a bare text link, no
+confirmation at all), delete pool, remove a song from a pool, and delete a
+library song. `test/pool_editor_screen_test.dart`'s song-removal test now taps
+through the dialog it previously didn't need to.
+
+#### Empty states
+A shared `EmptyState` widget (icon + message + optional call-to-action)
+replaced the inline `Text`-only empty states on Home, the pool list, and the
+pool editor's song list, and backs the two new empty states in Library ("no
+imported songs yet" and "no songs match your search").
+
+#### Left alone deliberately
+- The spec's "Edit Pool" settings row isn't a separate screen — editing
+  requires picking a pool first, so it's the same destination as "Manage
+  Pools." Adding a second row to the same place would just be a second way to
+  find one thing.
+- "Application Settings" only got an About/version row (via the new
+  `package_info_plus` dependency) — there's no app-level preference (theme,
+  locale, etc.) to expose yet, so the section stays honest rather than
+  shipping toggles that don't do anything.
+- A full accessibility sweep of *pre-existing* small tap targets (the pool
+  song "×", the preview button, the back chevron) wasn't done here — it's a
+  large, unrelated, cross-cutting diff, and is flagged as a follow-up in
+  `UX_AUDIT.md` instead of folded into this change.
+
+#### Verified
+- `flutter analyze` → **No issues found.**
+- `flutter test` → **34 tests pass** (including the updated pool-removal test).
+- **Not yet verified on-device** — no Android device attached this session.
+  What still needs a real device: the multi-file picker's actual OS UI,
+  import progress timing on a real filesystem, and the new checkbox/dialog
+  touch targets.
+
 _(further entries appended below as each piece is built)_

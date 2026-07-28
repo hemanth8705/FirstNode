@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -139,25 +140,62 @@ class AppState extends ChangeNotifier {
 
   // ----------------------------------------------------------------- Songs ---
 
-  /// Adds an imported tone, renaming it (Name, Name (2), …) if it collides
-  /// with an existing bundled or imported name.
-  Future<void> addCustomSong(Song song) async {
-    var name = song.name;
-    var n = 2;
-    while (allSongs.any((s) => s.name == name)) {
-      name = '${song.name} ($n)';
-      n++;
+  /// Adds a batch of imported tones, renaming each (Name, Name (2), …) if it
+  /// collides with an existing bundled/imported/already-added-this-batch name.
+  Future<void> addCustomSongs(List<Song> songs) async {
+    if (songs.isEmpty) return;
+    for (final song in songs) {
+      var name = song.name;
+      var n = 2;
+      while (allSongs.any((s) => s.name == name)) {
+        name = '${song.name} ($n)';
+        n++;
+      }
+      customSongs.add(
+        Song(
+          name: name,
+          duration: song.duration,
+          asset: song.asset,
+          imported: true,
+          dateAdded: song.dateAdded,
+          originalFileName: song.originalFileName,
+          sizeBytes: song.sizeBytes,
+        ),
+      );
     }
-    customSongs.add(
-      Song(
-        name: name,
-        duration: song.duration,
-        asset: song.asset,
-        imported: true,
-      ),
-    );
     await _persist();
     notifyListeners();
+  }
+
+  /// Deletes an imported song's file from disk and removes it from the
+  /// library. Any alarm/pool still referencing it by name just won't find it
+  /// (see [songUsage] — callers should warn about this before calling).
+  Future<void> removeCustomSong(String name) async {
+    final i = customSongs.indexWhere((s) => s.name == name);
+    if (i < 0) return;
+    final song = customSongs[i];
+    try {
+      await File(song.asset).delete();
+    } catch (_) {
+      // Already gone, or not a plain file — nothing more we can do.
+    }
+    customSongs.removeAt(i);
+    await _persist();
+    notifyListeners();
+  }
+
+  /// Where a song (by name) is currently referenced, so the Library screen can
+  /// warn before deleting it out from under an alarm or pool.
+  ({List<String> alarmLabels, List<String> poolNames}) songUsage(String name) {
+    final alarmLabels = [
+      for (final a in alarms)
+        if (a.songName == name) (a.label.isEmpty ? 'Untitled alarm' : a.label),
+    ];
+    final poolNames = [
+      for (final p in pools)
+        if (p.songs.any((s) => s.name == name)) p.name,
+    ];
+    return (alarmLabels: alarmLabels, poolNames: poolNames);
   }
 
   // ------------------------------------------------------------- Summaries ---

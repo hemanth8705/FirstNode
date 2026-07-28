@@ -67,7 +67,15 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
     Navigator.of(context).pop();
   }
 
-  void _delete() {
+  Future<void> _delete() async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete this alarm?',
+      message: draft.label.isEmpty
+          ? 'This permanently deletes the alarm.'
+          : 'This permanently deletes "${draft.label}".',
+    );
+    if (!confirmed || !mounted) return;
     context.read<AppState>().deleteAlarm(draft.id);
     Navigator.of(context).pop();
   }

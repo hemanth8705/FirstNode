@@ -42,7 +42,14 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
     Navigator.of(context).pop();
   }
 
-  void _delete() {
+  Future<void> _delete() async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete "${draft.name}"?',
+      message: 'This permanently deletes the pool. Alarms using it will fall '
+          'back to no pool selected.',
+    );
+    if (!confirmed || !mounted) return;
     context.read<AppState>().deletePool(draft.id);
     Navigator.of(context).pop();
   }
@@ -52,29 +59,55 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
       MaterialPageRoute(
         builder: (_) => SongPickerScreen(
           mode: SongPickerMode.poolAdd,
-          onAdd: (name) => setState(() {
-            draft.songs.add(
-              PoolSong(
-                name: name,
-                start: 0,
-                end: songDuration(context.read<AppState>().allSongs, name),
-                volume: 80,
-              ),
-            );
-          }),
+          onAdd: (names) {
+            if (names.isEmpty) return;
+            setState(() {
+              final catalog = context.read<AppState>().allSongs;
+              for (final name in names) {
+                draft.songs.add(
+                  PoolSong(
+                    name: name,
+                    start: 0,
+                    end: songDuration(catalog, name),
+                    volume: 80,
+                  ),
+                );
+              }
+            });
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Added ${names.length} song${names.length == 1 ? '' : 's'}',
+                  ),
+                  duration: const Duration(milliseconds: 1200),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+          },
         ),
       ),
     );
     if (mounted) setState(() {});
   }
 
-  void _removeSong(int i) => setState(() {
-    draft.songs.removeAt(i);
-    _expanded = null;
-    // Keep the stored count in range so the frozen pills below match what the
-    // pool can actually freeze.
-    draft.frozenCount = draft.effectiveFrozenCount;
-  });
+  Future<void> _removeSong(int i) async {
+    final song = draft.songs[i];
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Remove "${song.name}" from this pool?',
+      confirmLabel: 'Remove',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() {
+      draft.songs.removeAt(i);
+      _expanded = null;
+      // Keep the stored count in range so the frozen pills below match what
+      // the pool can actually freeze.
+      draft.frozenCount = draft.effectiveFrozenCount;
+    });
+  }
 
   /// Drag-and-drop: pull the song out and reinsert it where it was dropped.
   /// [newIndex] is the song's final index — `onReorderItem` already corrects for
@@ -146,12 +179,13 @@ class _PoolEditorScreenState extends State<PoolEditorScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (draft.songs.isEmpty)
-                            Text(
-                              'No songs yet. Tap + Add.',
-                              style: TextStyle(
-                                color: AppColors.w(0.4),
-                                fontSize: 14,
-                              ),
+                            EmptyState(
+                              icon: Icons.queue_music_outlined,
+                              title: 'No songs yet',
+                              subtitle:
+                                  'Add songs to build this pool\'s playlist.',
+                              actionLabel: '+ Add song',
+                              onAction: _addSong,
                             ),
                           if (!widget.isNew) ...[
                             const SizedBox(height: 22),
