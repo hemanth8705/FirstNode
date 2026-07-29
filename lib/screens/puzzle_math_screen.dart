@@ -78,7 +78,7 @@ class _PuzzleMathScreenState extends State<PuzzleMathScreen> {
                   const SectionLabel('DIFFICULTY MIX'),
                   const SizedBox(height: 6),
                   Text(
-                    'Easy is addition/subtraction, medium adds multiplication/division, hard adds exponents. Set a fixed count or a random range for each.',
+                    'Easy: simple addition and subtraction. Medium: adds multiplication and division with order of operations. Hard: adds brackets and multi-step calculations.',
                     style: TextStyle(
                       color: AppColors.w(0.32),
                       fontSize: 12,

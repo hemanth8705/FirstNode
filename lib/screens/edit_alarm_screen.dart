@@ -8,12 +8,14 @@ import '../models/song.dart';
 import '../services/audio_service.dart';
 import '../services/formatters.dart';
 import '../services/post_alarm_reminder.dart';
+import '../services/puzzle_engine.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_widgets.dart';
 import 'pool_picker_screen.dart';
 import 'puzzle_math_screen.dart';
 import 'puzzle_rewrite_screen.dart';
+import 'puzzle_solve_screen.dart';
 import 'song_picker_screen.dart';
 
 /// Create or edit a single alarm. Works on a [draft] copy so that Cancel simply
@@ -145,6 +147,26 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
   }
 
   void _removePuzzle(int i) => setState(() => draft.puzzles.removeAt(i));
+
+  void _practicePuzzles() {
+    final queue = PuzzleEngine().resolveQueue(draft);
+    if (queue.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add some puzzles first.')),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PuzzleSolveScreen(
+          alarm: draft,
+          queue: queue,
+          playInApp: false,
+          isPractice: true,
+        ),
+      ),
+    );
+  }
 
   // ---------------------------------------------------------------- Build ---
 
@@ -750,6 +772,10 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
             ),
           ],
         ),
+        if (draft.puzzles.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          PrimaryButton(label: 'Test Puzzles', onTap: _practicePuzzles),
+        ],
       ],
     );
   }

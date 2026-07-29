@@ -1127,4 +1127,125 @@ imported songs yet" and "no songs match your search").
   import progress timing on a real filesystem, and the new checkbox/dialog
   touch targets.
 
+---
+
+### 2026-07-28 — Bug fix: Alarm playback stops when song ends + Puzzle difficulty redesign + Practice mode
+
+#### Problem: alarm playback duration
+
+The alarm could stop playing when the audio file reached its natural end,
+even though the user hadn't dismissed or solved the puzzles. Root cause:
+for `SoundMode.specific` and `SoundMode.random`, audio was delegated
+entirely to the native `alarm` package's foreground service with
+`loopAudio: true`, and Dart had no fallback. If the native loop failed
+(e.g., for imported device files on certain Android versions), playback
+simply stopped.
+
+**Fix**: Dart now drives audio playback for ALL sound modes, not just pool
+mode. The native alarm side always plays the silent placeholder
+(`kSilentPlaceholderAsset`) to keep the foreground service alive, while
+`AudioService` handles all audible output.
+
+Changes:
+- `alarm_scheduler.dart` — `_assetFor()` replaced with a simple `_asset`
+  getter that always returns the silent placeholder. Removed the
+  `_findPool` helper (no longer needed).
+- `main.dart` — `_onRing()` now always passes `playInApp: true` to
+  both `RingingScreen` and `PuzzleSolveScreen`. Removed the
+  `needsDartPlayback` variable.
+- `audio_service.dart` — Added `_alarmLoopActive`/`_alarmLoopSong`
+  tracking so `onPlayerComplete` can force-replay the song if
+  `ReleaseMode.loop` fails (safety net). Updated `_play()` to accept
+  optional `startSec`/`endSec` for trim-within-loop (seeks back to
+  `startSec` when position reaches `endSec`). All cleanup paths
+  (`stop`, `dispose`, `playPool`, `preview`) now clear alarm-loop state.
+- `playForAlarm()` for specific mode now passes the alarm's trim range
+  (`alarm.start`, `alarm.end`) to `_play`, giving Dart-driven trim
+  support that the native side never had.
+
+#### Problem: puzzle difficulty levels feel identical
+
+Easy, Medium, and Hard generated nearly identical equations. The old
+generator picked random terms and operators from a flat pool — the only
+difference between levels was which operators were available (`+/-` vs
+`+/-/×/÷` vs `+/-/×/÷/^`), and evaluation was strictly left-to-right
+(no order of operations, no brackets).
+
+**Fix**: Complete rewrite of `puzzle_engine.dart`'s `buildQuestion()` with
+a template-based generator. Each difficulty level uses structurally
+different expression templates:
+
+- **Easy** (2 terms): `a + b` or `a − b`, numbers 1-50.
+- **Medium** (2-3 terms, gated by `variables` setting): `a × b`,
+  `a ÷ b`, `a + b × c`, `a × b − c`, etc. Proper order of operations —
+  the displayed expression and the expected answer follow PEMDAS.
+  Division is clean by construction (generate quotient and divisor,
+  multiply to get dividend). Subtraction results are always non-negative.
+- **Hard** (3-4 terms, gated by `variables` setting): Brackets and
+  multi-step calculations: `(a + b) × c`, `a ÷ (b + c)`,
+  `(a + b) × (c + d)`, `a × (b − c) + d`, etc. Answers are always
+  integers and non-negative.
+
+Exponents were removed — the user's difficulty spec doesn't include them,
+and they weren't producing obviously harder puzzles.
+
+Updated `puzzle_math_screen.dart`'s description text to reflect the new
+levels: "Easy: simple addition and subtraction. Medium: adds
+multiplication and division with order of operations. Hard: adds
+brackets and multi-step calculations."
+
+#### Feature: shuffle mixed-difficulty puzzle queue
+
+`resolveQueue()` now calls `queue.shuffle(_rng)` after building the full
+list. When multiple difficulties are selected (e.g., 3 easy + 2 medium +
+1 hard), the puzzles are interleaved randomly rather than grouped by
+level. Rewrite puzzles are shuffled in too.
+
+#### Feature: puzzle practice mode
+
+Users can now test their puzzle configuration without triggering a real
+alarm. Added a "Test Puzzles" button to the edit alarm screen's puzzle
+section (visible only when at least one puzzle is configured).
+
+Changes:
+- `puzzle_solve_screen.dart` — Added `isPractice` flag. When true: no
+  audio plays, back navigation is allowed, and completing all puzzles
+  shows a "Practice complete!" dialog with the count instead of calling
+  `onStop`.
+- `edit_alarm_screen.dart` — Added `_practicePuzzles()` method that
+  generates a queue from the current draft's puzzle config and pushes
+  `PuzzleSolveScreen` in practice mode. Shows a snackbar if no puzzles
+  are configured. Added imports for `puzzle_engine.dart` and
+  `puzzle_solve_screen.dart`.
+
+#### Puzzle generation review (Task 5)
+
+Reviewed the system for long-term maintainability:
+- **Template variety**: 2 easy + 7 medium + 8 hard = 17 distinct
+  expression shapes. Each template generates random terms within
+  difficulty-appropriate ranges, so repetition across puzzles is low.
+- **Correctness**: Every template computes the answer by construction
+  (no parsing/evaluation step that could disagree with the displayed
+  expression). Division dividends are generated as `divisor × quotient`,
+  so division is always clean. Subtraction templates ensure
+  non-negative results.
+- **Scalability**: Adding a new template is one `case` in the
+  `_tryMedium`/`_tryHard` switch — no changes to the rest of the engine.
+  Adding a new difficulty level would require a new `_build*` method and
+  a new case in `buildQuestion`.
+- **Future puzzle types**: The sealed `PuzzleStep` hierarchy makes
+  adding new types straightforward (the compiler forces handling in the
+  solve screen's `switch`).
+- **What's not done**: no timer/speed tracking for practice sessions,
+  no per-difficulty statistics, no "wrong attempt" penalty. These are
+  reasonable future additions but not needed for the current UX.
+
+#### Verified
+- `flutter analyze` → **No issues found.**
+- `flutter test` → **34 tests pass.**
+- **Not yet verified on-device** — no emulator attached. What needs a
+  real device: the Dart-driven playback for specific/random modes
+  (confirm it loops correctly and respects trim), and the practice mode
+  completion dialog.
+
 _(further entries appended below as each piece is built)_

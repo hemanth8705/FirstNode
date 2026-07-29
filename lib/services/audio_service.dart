@@ -36,15 +36,26 @@ class AudioService {
   int _poolBaseVolume = 100;
   bool _poolActive = false;
 
+  // ---------------------------------------------- Single-song alarm loop ---
+  bool _alarmLoopActive = false;
+  Song? _alarmLoopSong;
+  int _alarmLoopStart = 0;
+  int _alarmLoopVolume = 100;
+
   AudioService() {
     _player.onPlayerComplete.listen((_) {
       previewPlaying.value = false;
-      // A pool track's own audio can be shorter than its configured trim end
-      // (e.g. left at the default 60s over a 15s tone) — without this, the
-      // player would just stop naturally and playback would silently get
-      // stuck, since the position-based check below would never see it reach
-      // `track.end`.
-      if (_poolActive) _advancePoolTrack();
+      if (_poolActive) {
+        _advancePoolTrack();
+      } else if (_alarmLoopActive && _alarmLoopSong != null) {
+        // Safety net: if ReleaseMode.loop somehow didn't restart the audio
+        // (can happen with certain file types or platform quirks), force a
+        // replay from the configured trim start.
+        _playSource(_alarmLoopSong!, _alarmLoopVolume);
+        if (_alarmLoopStart > 0) {
+          _player.seek(Duration(seconds: _alarmLoopStart));
+        }
+      }
     });
   }
 
@@ -63,13 +74,32 @@ class AudioService {
     }
   }
 
-  Future<void> _play(Song song, int volumePercent) async {
+  Future<void> _play(
+    Song song,
+    int volumePercent, {
+    int startSec = 0,
+    int? endSec,
+  }) async {
     _cancelPoolTimers();
+    _cancelAlarmLoop();
     _trimSub?.cancel();
     await _player.stop();
-    // Loop so the tone keeps ringing until dismissed.
     await _player.setReleaseMode(ReleaseMode.loop);
+    _alarmLoopActive = true;
+    _alarmLoopSong = song;
+    _alarmLoopStart = startSec;
+    _alarmLoopVolume = volumePercent;
     await _playSource(song, volumePercent);
+    if (startSec > 0) {
+      await _player.seek(Duration(seconds: startSec));
+    }
+    if (endSec != null && endSec > startSec) {
+      _trimSub = _player.onPositionChanged.listen((pos) {
+        if (pos.inSeconds >= endSec) {
+          _player.seek(Duration(seconds: startSec));
+        }
+      });
+    }
   }
 
   Future<void> playSongByName(
@@ -90,6 +120,8 @@ class AudioService {
   }
 
   /// Picks and plays the right tone for [alarm], honoring its sound mode.
+  /// Dart drives audio for ALL modes — the native alarm side plays a silent
+  /// placeholder to keep the foreground service alive.
   Future<void> playForAlarm(
     Alarm alarm,
     List<Pool> pools,
@@ -97,7 +129,13 @@ class AudioService {
   ) async {
     switch (alarm.soundMode) {
       case SoundMode.specific:
-        await playSongByName(allSongs, alarm.songName, volume: alarm.volume);
+        final song = songByName(allSongs, alarm.songName) ?? kSongCatalog.first;
+        await _play(
+          song,
+          alarm.volume,
+          startSec: alarm.start,
+          endSec: alarm.end,
+        );
       case SoundMode.random:
         final pool = _findPool(alarm.poolId, pools);
         if (pool != null && pool.songs.isNotEmpty) {
@@ -133,6 +171,7 @@ class AudioService {
   /// combined volume ramps in linearly over its configured duration,
   /// continuing seamlessly across song changes.
   Future<void> playPool(Pool pool, List<Song> allSongs, Alarm alarm) async {
+    _cancelAlarmLoop();
     _cancelPoolTimers();
     _trimSub?.cancel();
     if (pool.songs.isEmpty) {
@@ -195,6 +234,11 @@ class AudioService {
     await _player.setVolume(fraction.clamp(0.0, 1.0));
   }
 
+  void _cancelAlarmLoop() {
+    _alarmLoopActive = false;
+    _alarmLoopSong = null;
+  }
+
   void _cancelPoolTimers() {
     _poolActive = false;
     _poolPosSub?.cancel();
@@ -204,6 +248,7 @@ class AudioService {
   }
 
   Future<void> stop() async {
+    _cancelAlarmLoop();
     _cancelPoolTimers();
     await _player.stop();
   }
@@ -222,6 +267,7 @@ class AudioService {
     int? endSec,
     int volume = 100,
   }) async {
+    _cancelAlarmLoop();
     _cancelPoolTimers();
     _trimSub?.cancel();
     final song = songByName(allSongs, name) ?? kSongCatalog.first;
@@ -262,6 +308,7 @@ class AudioService {
   }
 
   void dispose() {
+    _cancelAlarmLoop();
     _cancelPoolTimers();
     _trimSub?.cancel();
     previewingName.dispose();

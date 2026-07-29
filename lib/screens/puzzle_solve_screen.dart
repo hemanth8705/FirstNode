@@ -23,12 +23,17 @@ class PuzzleSolveScreen extends StatefulWidget {
   final bool blockBack;
   final Future<void> Function()? onStop;
 
+  /// When true, this is a practice session: no audio, back allowed, and a
+  /// completion dialog is shown instead of calling [onStop].
+  final bool isPractice;
+
   const PuzzleSolveScreen({
     required this.alarm,
     required this.queue,
     this.playInApp = true,
     this.blockBack = false,
     this.onStop,
+    this.isPractice = false,
     super.key,
   });
 
@@ -42,10 +47,12 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
   int _idx = 0;
   String _error = '';
 
+  bool get _shouldPlayAudio => widget.playInApp && !widget.isPractice;
+
   @override
   void initState() {
     super.initState();
-    if (widget.playInApp) {
+    if (_shouldPlayAudio) {
       final app = context.read<AppState>();
       _audio.playForAlarm(widget.alarm, app.pools, app.allSongs);
     }
@@ -54,7 +61,7 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
   @override
   void dispose() {
     _input.dispose();
-    if (widget.playInApp) _audio.stop();
+    if (_shouldPlayAudio) _audio.stop();
     super.dispose();
   }
 
@@ -87,6 +94,30 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
   }
 
   Future<void> _finish() async {
+    if (widget.isPractice) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text(
+            'Practice complete!',
+            style: TextStyle(color: Colors.white, fontSize: 18),
+          ),
+          content: Text(
+            'You solved ${widget.queue.length} puzzle${widget.queue.length == 1 ? '' : 's'}.',
+            style: TextStyle(color: AppColors.w(0.6), fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
     await widget.onStop?.call();
     if (mounted) Navigator.of(context).pop();
   }
@@ -95,7 +126,7 @@ class _PuzzleSolveScreenState extends State<PuzzleSolveScreen> {
   Widget build(BuildContext context) {
     final step = _step;
     return PopScope(
-      canPop: !widget.blockBack,
+      canPop: widget.isPractice || !widget.blockBack,
       child: Scaffold(
         body: SafeArea(
           child: Padding(
